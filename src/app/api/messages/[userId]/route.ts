@@ -10,10 +10,23 @@ export async function GET(
   const { userId } = await params;
   const decodedUserId = decodeURIComponent(userId);
 
+  // Reading messages must not fail if the unread-count write fails.
   if (req.nextUrl.searchParams.get('markRead') === 'true') {
-    await markUserRead(decodedUserId);
+    try {
+      await markUserRead(decodedUserId);
+    } catch (error) {
+      console.error('markUserRead failed:', error);
+    }
   }
 
-  const messages = await getMessages(decodedUserId);
-  return NextResponse.json({ messages });
+  try {
+    const messages = await getMessages(decodedUserId);
+    return NextResponse.json({ messages });
+  } catch (error) {
+    console.error('getMessages failed:', error);
+    return NextResponse.json(
+      { messages: [], error: error instanceof Error ? error.message : 'Failed to load messages' },
+      { status: 500 },
+    );
+  }
 }

@@ -30,5 +30,7 @@ export async function saveStoreToBlob(store: PersistedStore): Promise<void> {
   await put(BLOB_PATH, JSON.stringify(store), {
     access: 'private',
     addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
   });
 }
