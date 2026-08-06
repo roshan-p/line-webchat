@@ -92,6 +92,7 @@ export default function WebchatPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +115,7 @@ export default function WebchatPage() {
   }, []);
 
   const fetchMessages = useCallback(async (userId: string) => {
+    setMessagesLoading(true);
     try {
       const res = await fetch(
         `/api/messages/${encodeURIComponent(userId)}?markRead=true`,
@@ -122,6 +124,8 @@ export default function WebchatPage() {
       setMessages(data.messages ?? []);
     } catch {
       /* ignore */
+    } finally {
+      setMessagesLoading(false);
     }
   }, []);
 
@@ -177,6 +181,7 @@ export default function WebchatPage() {
 
   const handleSelectUser = (userId: string) => {
     setSelectedUserId(userId);
+    setMessages([]);
     setError(null);
   };
 
@@ -299,7 +304,12 @@ export default function WebchatPage() {
             </header>
 
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              {messages.length === 0 ? (
+              {messagesLoading ? (
+                <div className="flex flex-col items-center gap-3 py-12">
+                  <Spinner />
+                  <p className="text-xs text-gray-500">กำลังโหลดข้อความ...</p>
+                </div>
+              ) : messages.length === 0 ? (
                 <p className="text-center text-sm text-gray-500">
                   ยังไม่มีข้อความในแชทนี้
                 </p>

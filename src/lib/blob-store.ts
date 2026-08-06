@@ -1,4 +1,4 @@
-import { list, put } from '@vercel/blob';
+import { get, put } from '@vercel/blob';
 import type { PersistedStore } from './redis-store';
 
 const BLOB_PATH = 'line-webchat/store.json';
@@ -11,12 +11,14 @@ export async function loadStoreFromBlob(): Promise<PersistedStore | null> {
   if (!isBlobConfigured()) return null;
 
   try {
-    const { blobs } = await list({ prefix: 'line-webchat/', limit: 1 });
-    if (!blobs.length) return null;
+    const result = await get(BLOB_PATH, {
+      access: 'private',
+      useCache: false,
+    });
+    if (!result) return null;
 
-    const response = await fetch(blobs[0].url);
-    if (!response.ok) return null;
-    return (await response.json()) as PersistedStore;
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as PersistedStore;
   } catch {
     return null;
   }
