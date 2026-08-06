@@ -1,11 +1,8 @@
 /**
- * Realtime pushes carry the updates, so polling only needs to be a safety net
- * when it is connected. Without it, polling is the only way to see new chats.
+ * Only used while realtime is unavailable. Once Ably is connected the pushes
+ * replace polling entirely, and reconnects refetch on their own.
  */
-export const POLL_INTERVAL_MS = {
-  live: 30000,
-  fallback: 5000,
-} as const;
+export const POLL_INTERVAL_MS = 5000;
 
 export const LOCALE = 'th-TH';
 

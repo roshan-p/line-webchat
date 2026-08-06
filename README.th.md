@@ -7,6 +7,7 @@ Webchat dashboard สำหรับรับและตอบข้อคว�
 ไม่ต้องมี Node.js server แยก
 
 - **Webchat:** https://line-webchat-one.vercel.app
+- **LINE OA:** `@343bfaqz` — แอดเป็นเพื่อนแล้วทักเข้ามาลองได้เลย
 - **Repo:** https://github.com/roshan-p/line-webchat
 
 ## Features
@@ -15,6 +16,7 @@ Webchat dashboard สำหรับรับและตอบข้อคว�
 - ตอบกลับ User ผ่าน LINE Push Message API
 - แสดงรายชื่อ User ที่ทักเข้ามา พร้อมรูปโปรไฟล์ เวลาล่าสุด และจำนวนข้อความที่ยังไม่อ่าน
 - รองรับข้อความรูปภาพจาก LINE
+- แสดงข้อความทันทีที่กดส่ง และมีปุ่มส่งใหม่รายข้อความเมื่อส่งไม่สำเร็จ
 - อัปเดตแบบ realtime ผ่าน Ably (ถ้าตั้งค่าไว้) โดยมี polling เป็น fallback
 - เก็บข้อมูลถาวรใน Vercel Blob
 - Responsive ใช้งานได้ทั้งเดสก์ท็อปและมือถือ
@@ -57,8 +59,12 @@ Webchat UI
    │  2. addMessage() บันทึกลง storage
    │  3. publishRealtimeEvent('outbound') ให้แท็บอื่นเห็นด้วย
    ▼
-ตอบ message กลับไปให้ UI แสดงผลทันทีโดยไม่ต้องรอ refetch
+ตอบ message กลับไปให้ UI สลับแทน bubble ที่แสดงไว้ล่วงหน้า
 ```
+
+bubble จะขึ้นทันทีที่กดส่ง โดยจางลงและเขียนว่า "กำลังส่ง" ถ้าส่งไม่สำเร็จ
+bubble จะยังอยู่ที่เดิมและมีปุ่มสีแดงเล็กๆ ให้กดส่งใหม่ทางด้านซ้าย
+เหมือนในแอป LINE ข้อความที่พิมพ์ไว้จึงไม่หายไปไหน
 
 ### 3. การอัปเดตหน้าจอ
 
@@ -75,9 +81,14 @@ useChat(realtimeEnabled)
         │                        ▼ เมื่อมี event เข้ามา
         │                  โหลด users ใหม่ + โหลด messages ถ้าเป็นแชทที่เปิดอยู่
         │
-        └── setInterval polling  ── ต่อ Ably ติด: ทุก 30 วินาที (safety net)
-                                 ── ต่อไม่ติด/ไม่ได้ตั้งค่า: ทุก 5 วินาที
+        ├── setInterval polling  ── เฉพาะตอน Ably ต่อไม่ติด/ไม่ได้ตั้งค่า (5 วินาที)
+        │
+        └── refetch ตอน reconnect และตอนกลับมาที่แท็บ
 ```
+
+ระหว่างที่ Ably ต่อติดจะไม่มี timer วิ่งเลย ช่องว่างที่ push อาจตกหล่น เช่น
+การเชื่อมต่อหลุด หรือแท็บถูก browser หน่วงไว้ตอนอยู่เบื้องหลัง จะถูกปิดด้วยการ
+refetch หนึ่งครั้งตอนต่อกลับมาได้ และอีกครั้งตอนกลับมาที่แท็บ
 
 Vercel เป็น serverless จึงเปิด WebSocket server ค้างไว้เองไม่ได้ (Socket.IO ใช้ไม่ได้)
 Ably ทำหน้าที่เป็นตัวกลางรับ publish จาก API route แล้วกระจายต่อให้ browser
@@ -128,7 +139,7 @@ src/
 │   ├── ChatPanel.tsx             ฝั่งขวาทั้งหมด หรือ empty state
 │   ├── ChatHeader.tsx            หัวแชท + ปุ่มย้อนกลับบนมือถือ
 │   ├── MessageList.tsx           รายการข้อความ + auto scroll ลงล่าง
-│   ├── MessageBubble.tsx         bubble เดียว รองรับทั้งข้อความและรูป
+│   ├── MessageBubble.tsx         bubble เดียว รองรับข้อความ รูป และปุ่มส่งใหม่
 │   ├── MessageComposer.tsx       ช่องพิมพ์ (ถือ state ของ draft เอง)
 │   ├── StorageWarningBanner.tsx  เตือนเมื่อยังไม่ได้ตั้ง Blob
 │   ├── Avatar.tsx                รูปโปรไฟล์ หรือตัวอักษรแรกของชื่อ
@@ -256,9 +267,8 @@ npx ngrok http 3000
 
 ถ้าไม่ตั้งค่าอะไรเพิ่ม หน้าเว็บจะ poll ทุก 5 วินาที ใช้งานได้แต่มีดีเลย์
 
-ถ้าตั้ง `ABLY_API_KEY` ระบบจะ push ทันทีที่มีคนทักเข้ามา และลด polling
-เหลือทุก 30 วินาทีไว้เป็น safety net เฉยๆ มุมบนซ้ายจะมีจุดสีบอกสถานะว่า
-กำลังใช้โหมดไหนอยู่
+ถ้าตั้ง `ABLY_API_KEY` ระบบจะ push ทันทีที่มีคนทักเข้ามา และหยุด polling
+ไปเลย มุมบนซ้ายจะมีจุดสีบอกสถานะว่ากำลังใช้โหมดไหนอยู่
 
 1. สมัคร [Ably](https://ably.com) — free tier ให้ 200 concurrent connections
    และ 6 ล้าน messages ต่อเดือน ไม่ต้องใช้บัตรเครดิต

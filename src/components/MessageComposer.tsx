@@ -5,18 +5,19 @@ import { SendIcon } from './icons';
 import { t } from '@/lib/i18n';
 
 interface MessageComposerProps {
-  sending: boolean;
-  /** Resolves to false when the send failed, so the draft is not lost. */
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string) => void;
 }
 
-export function MessageComposer({ sending, onSend }: MessageComposerProps) {
+export function MessageComposer({ onSend }: MessageComposerProps) {
   const [draft, setDraft] = useState('');
 
-  const submit = async () => {
+  // The message shows up in the thread right away and carries its own failure
+  // state, so the draft can be cleared without waiting for the server.
+  const submit = () => {
     const text = draft.trim();
-    if (!text || sending) return;
-    if (await onSend(text)) setDraft('');
+    if (!text) return;
+    onSend(text);
+    setDraft('');
   };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -40,11 +41,11 @@ export function MessageComposer({ sending, onSend }: MessageComposerProps) {
         />
         <button
           onClick={submit}
-          disabled={!draft.trim() || sending}
+          disabled={!draft.trim()}
           aria-label={t.chat.send}
           className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-line-green text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          {sending ? <span className="text-xs">...</span> : <SendIcon />}
+          <SendIcon />
         </button>
       </div>
     </div>

@@ -28,10 +28,9 @@ export default function WebchatPage() {
           user={chat.selectedUser}
           messages={chat.messages}
           messagesLoading={chat.messagesLoading}
-          sending={chat.sending}
-          error={chat.error}
           onBack={() => chat.selectUser(null)}
           onSend={chat.send}
+          onRetry={chat.retry}
           hiddenOnMobile={!chatOpen}
         />
       </div>

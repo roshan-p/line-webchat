@@ -9,9 +9,10 @@ import type { ChatMessage } from '@/types/chat';
 interface MessageListProps {
   messages: ChatMessage[];
   loading: boolean;
+  onRetry: (messageId: string) => void;
 }
 
-export function MessageList({ messages, loading }: MessageListProps) {
+export function MessageList({ messages, loading, onRetry }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export function MessageList({ messages, loading }: MessageListProps) {
         <p className="text-center text-sm text-gray-500">{t.chat.emptyConversation}</p>
       ) : (
         messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble key={message.id} message={message} onRetry={onRetry} />
         ))
       )}
       <div ref={bottomRef} />

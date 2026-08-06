@@ -25,6 +25,8 @@ export const t = {
     inputPlaceholder: 'พิมพ์ข้อความ...',
     send: 'ส่งข้อความ',
     selectUser: 'เลือก User เพื่อเริ่มตอบกลับ',
+    sending: 'กำลังส่ง',
+    resend: 'ส่งใหม่',
   },
   errors: {
     sendFailed: 'ส่งข้อความไม่สำเร็จ',

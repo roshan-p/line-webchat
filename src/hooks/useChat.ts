@@ -1,10 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRealtime } from './useRealtime';
 import * as api from '@/lib/api-client';
 import { POLL_INTERVAL_MS } from '@/lib/constants';
-import { t } from '@/lib/i18n';
 import type { ChatMessage, ChatUser } from '@/types/chat';
 
 export interface UseChatResult {
@@ -14,11 +13,17 @@ export interface UseChatResult {
   selectedUserId: string | null;
   messages: ChatMessage[];
   messagesLoading: boolean;
-  sending: boolean;
-  error: string | null;
   isLive: boolean;
   selectUser: (userId: string | null) => void;
-  send: (text: string) => Promise<boolean>;
+  send: (text: string) => void;
+  retry: (messageId: string) => void;
+}
+
+let optimisticCounter = 0;
+
+function nextOptimisticId(): string {
+  optimisticCounter += 1;
+  return `pending-${Date.now()}-${optimisticCounter}`;
 }
 
 /**
@@ -31,8 +36,6 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -47,7 +50,10 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
   const loadMessages = useCallback(async (userId: string, silent = false) => {
     if (!silent) setMessagesLoading(true);
     try {
-      setMessages(await api.fetchMessages(userId));
+      const stored = await api.fetchMessages(userId);
+      // Optimistic messages are not on the server yet, so a refresh would drop
+      // them unless they are carried over.
+      setMessages((prev) => [...stored, ...prev.filter((message) => message.deliveryStatus)]);
     } catch {
       // Keep whatever is already on screen rather than blanking the chat.
     } finally {
@@ -55,50 +61,107 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
     }
   }, []);
 
+  const refresh = useCallback(() => {
+    loadUsers();
+    if (selectedUserId) loadMessages(selectedUserId, true);
+  }, [loadUsers, loadMessages, selectedUserId]);
+
   const realtimeStatus = useRealtime(realtimeEnabled, (event) => {
     loadUsers();
     if (event.userId === selectedUserId) loadMessages(event.userId, true);
   });
 
   const isLive = realtimeStatus === 'connected';
-  const pollInterval = isLive ? POLL_INTERVAL_MS.live : POLL_INTERVAL_MS.fallback;
 
   useEffect(() => {
     loadUsers();
-    const timer = setInterval(loadUsers, pollInterval);
-    return () => clearInterval(timer);
-  }, [loadUsers, pollInterval]);
+  }, [loadUsers]);
 
   useEffect(() => {
     if (!selectedUserId) return;
     loadMessages(selectedUserId);
-    const timer = setInterval(() => loadMessages(selectedUserId, true), pollInterval);
+  }, [selectedUserId, loadMessages]);
+
+  // Realtime pushes make polling redundant, so it only runs when the socket is
+  // down. Reconnecting fills the gap through the refresh below.
+  useEffect(() => {
+    if (isLive) return;
+    const timer = setInterval(refresh, POLL_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [selectedUserId, loadMessages, pollInterval]);
+  }, [isLive, refresh]);
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+
+  useEffect(() => {
+    if (!isLive) return;
+    refreshRef.current();
+  }, [isLive]);
+
+  // Background tabs get throttled, so anything pushed while hidden is caught up
+  // on return.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshRef.current();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   const selectUser = useCallback((userId: string | null) => {
     setSelectedUserId(userId);
     setMessages([]);
-    setError(null);
+  }, []);
+
+  const deliver = useCallback(async (userId: string, id: string, text: string) => {
+    try {
+      const sent = await api.sendMessage(userId, text);
+      setMessages((prev) =>
+        // The realtime push can land before this response, in which case the
+        // stored copy is already here and swapping in would duplicate it.
+        prev
+          .filter((message) => message.id !== sent.id)
+          .map((message) => (message.id === id ? sent : message)),
+      );
+    } catch {
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === id ? { ...message, deliveryStatus: 'failed' as const } : message,
+        ),
+      );
+    }
   }, []);
 
   const send = useCallback(
-    async (text: string) => {
-      if (!selectedUserId || sending) return false;
-      setSending(true);
-      setError(null);
-      try {
-        const message = await api.sendMessage(selectedUserId, text);
-        setMessages((prev) => [...prev, message]);
-        return true;
-      } catch (err) {
-        setError(err instanceof Error ? err.message : t.errors.sendFailed);
-        return false;
-      } finally {
-        setSending(false);
-      }
+    (text: string) => {
+      if (!selectedUserId) return;
+      const pending: ChatMessage = {
+        id: nextOptimisticId(),
+        userId: selectedUserId,
+        direction: 'outbound',
+        messageType: 'text',
+        text,
+        timestamp: Date.now(),
+        deliveryStatus: 'sending',
+      };
+      setMessages((prev) => [...prev, pending]);
+      deliver(selectedUserId, pending.id, text);
     },
-    [selectedUserId, sending],
+    [selectedUserId, deliver],
+  );
+
+  const retry = useCallback(
+    (messageId: string) => {
+      const target = messages.find((message) => message.id === messageId);
+      if (!target?.text || target.deliveryStatus !== 'failed') return;
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId ? { ...message, deliveryStatus: 'sending' as const } : message,
+        ),
+      );
+      deliver(target.userId, messageId, target.text);
+    },
+    [messages, deliver],
   );
 
   return {
@@ -108,10 +171,9 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
     selectedUserId,
     messages,
     messagesLoading,
-    sending,
-    error,
     isLive,
     selectUser,
     send,
+    retry,
   };
 }

@@ -9,10 +9,9 @@ interface ChatPanelProps {
   user: ChatUser | null;
   messages: ChatMessage[];
   messagesLoading: boolean;
-  sending: boolean;
-  error: string | null;
   onBack: () => void;
-  onSend: (text: string) => Promise<boolean>;
+  onSend: (text: string) => void;
+  onRetry: (messageId: string) => void;
   /** Mobile shows one pane at a time, so the chat hides while browsing the list. */
   hiddenOnMobile: boolean;
 }
@@ -32,10 +31,9 @@ export function ChatPanel({
   user,
   messages,
   messagesLoading,
-  sending,
-  error,
   onBack,
   onSend,
+  onRetry,
   hiddenOnMobile,
 }: ChatPanelProps) {
   return (
@@ -45,13 +43,8 @@ export function ChatPanel({
       {user ? (
         <>
           <ChatHeader user={user} onBack={onBack} />
-          <MessageList messages={messages} loading={messagesLoading} />
-          {error && (
-            <div className="mx-4 mb-2 rounded-lg bg-red-900/40 px-4 py-2 text-sm text-red-300 md:mx-6">
-              {error}
-            </div>
-          )}
-          <MessageComposer sending={sending} onSend={onSend} />
+          <MessageList messages={messages} loading={messagesLoading} onRetry={onRetry} />
+          <MessageComposer onSend={onSend} />
         </>
       ) : (
         <NoChatSelected />

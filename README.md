@@ -7,6 +7,7 @@ Account. Built with **Next.js 15 + TypeScript**, using API Routes as the backend
 so no separate Node.js server is needed.
 
 - **Webchat:** https://line-webchat-one.vercel.app
+- **LINE OA:** `@343bfaqz` — add it as a friend to try the inbound side
 - **Repo:** https://github.com/roshan-p/line-webchat
 
 ## Features
@@ -15,6 +16,7 @@ so no separate Node.js server is needed.
 - Replies to users through the LINE Push Message API
 - Lists everyone who has messaged in, with avatar, last message time and unread count
 - Displays image messages sent from LINE
+- Optimistic sending with a per-message retry button when delivery fails
 - Realtime updates through Ably when configured, with polling as a fallback
 - Persists conversations in Vercel Blob
 - Responsive on both desktop and mobile
@@ -57,8 +59,12 @@ Webchat UI
    │  2. addMessage() writes it to storage
    │  3. publishRealtimeEvent('outbound') so other open tabs see it too
    ▼
-returns the message so the UI can render it without waiting for a refetch
+returns the message so the UI can swap it in for the optimistic one
 ```
+
+The bubble is rendered the moment you hit send, dimmed and labelled "กำลังส่ง".
+If the request fails the bubble stays put and grows a small red retry button on
+its left, the way the LINE app does it, so nothing typed is ever lost.
 
 ### 3. Keeping the screen up to date
 
@@ -75,9 +81,14 @@ useChat(realtimeEnabled)
         │                        ▼ on each event
         │                  reload users, and reload messages if that chat is open
         │
-        └── setInterval polling  ── Ably connected: every 30s as a safety net
-                                 ── not connected or not configured: every 5s
+        ├── setInterval polling  ── only while Ably is down or unconfigured (5s)
+        │
+        └── refetch on reconnect and when the tab becomes visible again
 ```
+
+While Ably is connected there is no timer at all. The gaps a push could fall
+into — a dropped connection, or a background tab that the browser throttled —
+are closed by refetching once on reconnect and once on returning to the tab.
 
 Vercel is serverless and cannot hold a WebSocket server open, which rules out
 Socket.IO. Ably sits in between: API routes publish to it, and it fans the event
@@ -131,7 +142,7 @@ src/
 │   ├── ChatPanel.tsx             the whole right side, or the empty state
 │   ├── ChatHeader.tsx            chat header with a mobile back button
 │   ├── MessageList.tsx           the messages, scrolled to the bottom
-│   ├── MessageBubble.tsx         one bubble, text or image
+│   ├── MessageBubble.tsx         one bubble, text or image, with retry on failure
 │   ├── MessageComposer.tsx       the input, owning its own draft state
 │   ├── StorageWarningBanner.tsx  shown when Blob is not configured
 │   ├── Avatar.tsx                profile picture, or the first letter of the name
@@ -151,7 +162,7 @@ src/
 │   ├── blob-store.ts             the only place that touches the Vercel Blob SDK
 │   ├── store-types.ts            shapes of the stored data
 │   ├── api-client.ts             every browser-side fetch
-│   ├── constants.ts              poll intervals, channel name, locale
+│   ├── constants.ts              poll interval, channel name, locale
 │   ├── i18n.ts                   all Thai UI copy
 │   └── format.ts                 time and name formatting
 │
@@ -262,8 +273,8 @@ With nothing configured the dashboard polls every 5 seconds. That works, but new
 messages take a moment to appear.
 
 Setting `ABLY_API_KEY` switches it to push, so messages show up as soon as they
-arrive, and polling drops to every 30 seconds purely as a safety net. A coloured
-dot in the top left shows which mode is active.
+arrive and the polling timer stops entirely. A coloured dot in the top left shows
+which mode is active.
 
 1. Sign up for [Ably](https://ably.com) — the free tier covers 200 concurrent
    connections and 6 million messages a month, with no credit card
