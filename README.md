@@ -7,7 +7,7 @@ Account. Built with **Next.js 15 + TypeScript**, using API Routes as the backend
 so no separate Node.js server is needed.
 
 - **Webchat:** https://line-webchat-one.vercel.app
-- **LINE OA:** `@343bfaqz` — add it as a friend to try the inbound side
+- **LINE OA:** `@343bfaqz` (add as a friend to try the inbound side)
 - **Repo:** https://github.com/roshan-p/line-webchat
 
 ## Features
@@ -25,42 +25,22 @@ so no separate Node.js server is needed.
 
 ## How it works
 
-### 1. Inbound — a user messages the LINE OA
+### 1. Inbound: a user messages the LINE OA
 
-```
-LINE User
-   │  sends a message in the LINE app
-   ▼
-LINE Platform
-   │  POST with an x-line-signature header
-   ▼
-/api/webhook
-   │  1. verify HMAC-SHA256 against LINE_CHANNEL_SECRET → 401 on mismatch
-   │  2. look up the sender with getUserProfile()
-   │  3. turn the event into a message with parseMessageFromEvent()
-   ▼
-ingestInboundEvents()          ── writes the whole batch to Vercel Blob at once
-   │
-   ▼
-publishRealtimeEvent('inbound')  ── tells the browser something changed
-```
+1. LINE User sends a message in the LINE app
+2. LINE Platform POSTs to `/api/webhook` with an `x-line-signature` header
+3. `/api/webhook` verifies HMAC-SHA256 against `LINE_CHANNEL_SECRET` (401 on mismatch), looks up the sender with `getUserProfile()`, and turns the event into a message with `parseMessageFromEvent()`
+4. `ingestInboundEvents()` writes the whole batch to Vercel Blob at once
+5. `publishRealtimeEvent('inbound')` tells the browser something changed
 
 The publish deliberately happens **after** the write settles. Otherwise the
 browser would refetch before the message reaches storage and get stale data back.
 
-### 2. Outbound — an admin replies
+### 2. Outbound: an admin replies
 
-```
-Webchat UI
-   │  types and hits send
-   ▼
-/api/send
-   │  1. pushTextMessage() → LINE Push API → arrives in the user's LINE app
-   │  2. addMessage() writes it to storage
-   │  3. publishRealtimeEvent('outbound') so other open tabs see it too
-   ▼
-returns the message so the UI can swap it in for the optimistic one
-```
+1. Webchat UI: user types and hits send
+2. `/api/send` calls `pushTextMessage()` (LINE Push API, arrives in the user's LINE app), `addMessage()` writes it to storage, and `publishRealtimeEvent('outbound')` so other open tabs see it too
+3. The API returns the message so the UI can swap it in for the optimistic one
 
 The bubble is rendered the moment you hit send, dimmed and labelled "กำลังส่ง".
 If the request fails the bubble stays put and grows a small red retry button on
@@ -68,26 +48,14 @@ its left, the way the LINE app does it, so nothing typed is ever lost.
 
 ### 3. Keeping the screen up to date
 
-```
-useServerConfig()  ── GET /api/health  → is Ably configured on the server?
-        │
-        ▼
-useChat(realtimeEnabled)
-        │
-        ├── useRealtime()  ── loads Ably from its CDN
-        │                  ── requests a token from /api/ably/auth
-        │                  ── subscribes to the "line-webchat" channel
-        │                        │
-        │                        ▼ on each event
-        │                  reload users, and reload messages if that chat is open
-        │
-        ├── setInterval polling  ── only while Ably is down or unconfigured (5s)
-        │
-        └── refetch on reconnect and when the tab becomes visible again
-```
+1. `useServerConfig()` calls `GET /api/health` to learn whether Ably is configured on the server
+2. `useChat(realtimeEnabled)` runs two paths in parallel:
+   - `useRealtime()` loads Ably from its CDN, requests a token from `/api/ably/auth`, subscribes to the `line-webchat` channel, and on each event reloads users and reloads messages if that chat is open
+   - `setInterval` polling only while Ably is down or unconfigured (5s)
+3. On reconnect and when the tab becomes visible again, the hook refetches once
 
 While Ably is connected there is no timer at all. The gaps a push could fall
-into — a dropped connection, or a background tab that the browser throttled —
+into (a dropped connection, or a background tab that the browser throttled)
 are closed by refetching once on reconnect and once on returning to the tab.
 
 Vercel is serverless and cannot hold a WebSocket server open, which rules out
@@ -103,13 +71,10 @@ the server.
 
 ### 5. Storage
 
-```
-store.ts  ── isPersistenceConfigured() ?
-              │
-              ├── BLOB_READ_WRITE_TOKEN set → persistent-store.ts → Vercel Blob
-              │
-              └── not set → in-memory Map (lost on cold start, dev only)
-```
+`store.ts` checks `isPersistenceConfigured()`:
+
+- `BLOB_READ_WRITE_TOKEN` set: `persistent-store.ts` writes to Vercel Blob
+- not set: in-memory `Map` (lost on cold start, dev only)
 
 Blob keeps everything in a single JSON file at `line-webchat/store.json`. Every
 write loads the whole file, edits it and writes it back, so concurrent webhook
@@ -120,60 +85,25 @@ overwriting each other.
 
 ## Project structure
 
-```
-src/
-├── app/                          pages and API routes (Next.js App Router)
-│   ├── api/
-│   │   ├── webhook/              receives LINE events, verifies the signature
-│   │   ├── send/                 pushes a message to a user
-│   │   ├── users/                conversation list, newest first
-│   │   ├── messages/[userId]/    messages in a chat, optionally marking them read
-│   │   ├── line-content/[messageId]/  proxies images from LINE
-│   │   ├── ably/auth/            issues a subscribe-only realtime token
-│   │   └── health/               reports the storage backend and realtime status
-│   ├── layout.tsx                root layout and viewport config
-│   ├── page.tsx                  composes ChatSidebar and ChatPanel
-│   └── globals.css               base styles pulled from the Tailwind theme
-│
-├── components/                   presentation only, no data fetching
-│   ├── ChatSidebar.tsx           conversation list and connection status
-│   ├── ConversationItem.tsx      a single row in that list
-│   ├── SidebarSkeleton.tsx       loading placeholder
-│   ├── ChatPanel.tsx             the whole right side, or the empty state
-│   ├── ChatHeader.tsx            chat header with a mobile back button
-│   ├── MessageList.tsx           the messages, scrolled to the bottom
-│   ├── MessageBubble.tsx         one bubble, text or image, with retry on failure
-│   ├── MessageComposer.tsx       the input, owning its own draft state
-│   ├── StorageWarningBanner.tsx  shown when Blob is not configured
-│   ├── Avatar.tsx                profile picture, or the first letter of the name
-│   ├── Spinner.tsx               spinner and LoadingState
-│   └── icons.tsx                 every SVG in one place
-│
-├── hooks/                        state and side effects
-│   ├── useChat.ts                the core: users, messages, polling, sending
-│   ├── useRealtime.ts            connects to Ably and subscribes
-│   └── useServerConfig.ts        asks the server what it supports
-│
-├── lib/                          logic with no React dependency
-│   ├── line.ts                   talks to LINE (profile, push, parse, content)
-│   ├── ably.ts                   publishes events and issues tokens, server side
-│   ├── store.ts                  picks between Blob and memory
-│   ├── persistent-store.ts       reads and writes the Blob-backed store
-│   ├── blob-store.ts             the only place that touches the Vercel Blob SDK
-│   ├── store-types.ts            shapes of the stored data
-│   ├── api-client.ts             every browser-side fetch
-│   ├── constants.ts              poll interval, channel name, locale
-│   ├── i18n.ts                   all Thai UI copy
-│   └── format.ts                 time and name formatting
-│
-├── types/
-│   └── chat.ts                   client-facing types, derived from store-types
-│
-└── tests/                        mirrors the folders above, one test per file
-    ├── components/
-    ├── hooks/
-    └── lib/
-```
+- `src/app/` pages and API routes (Next.js App Router)
+  - `api/webhook/` receives LINE events, verifies the signature
+  - `api/send/` pushes a message to a user
+  - `api/users/` conversation list, newest first
+  - `api/messages/[userId]/` messages in a chat, optionally marking them read
+  - `api/line-content/[messageId]/` proxies images from LINE
+  - `api/ably/auth/` issues a subscribe-only realtime token
+  - `api/health/` reports the storage backend and realtime status
+  - `layout.tsx` root layout and viewport config
+  - `page.tsx` composes ChatSidebar and ChatPanel
+  - `globals.css` base styles pulled from the Tailwind theme
+- `src/components/` presentation only, no data fetching
+  - `ChatSidebar.tsx`, `ConversationItem.tsx`, `SidebarSkeleton.tsx`
+  - `ChatPanel.tsx`, `ChatHeader.tsx`, `MessageList.tsx`, `MessageBubble.tsx`
+  - `MessageComposer.tsx`, `StorageWarningBanner.tsx`, `Avatar.tsx`, `Spinner.tsx`, `icons.tsx`
+- `src/hooks/` state and side effects (`useChat.ts`, `useRealtime.ts`, `useServerConfig.ts`)
+- `src/lib/` logic with no React dependency (`line.ts`, `ably.ts`, `store.ts`, `persistent-store.ts`, `blob-store.ts`, `store-types.ts`, `api-client.ts`, `constants.ts`, `i18n.ts`, `format.ts`)
+- `src/types/chat.ts` client-facing types, derived from store-types
+- `src/tests/` mirrors the folders above, one test per file
 
 ### Layering rules
 
@@ -301,8 +231,8 @@ Setting `ABLY_API_KEY` switches it to push, so messages show up as soon as they
 arrive and the polling timer stops entirely. A coloured dot in the top left shows
 which mode is active.
 
-1. Sign up for [Ably](https://ably.com) — the free tier covers 200 concurrent
-   connections and 6 million messages a month, with no credit card
+1. Sign up for [Ably](https://ably.com) (free tier: 200 concurrent connections
+   and 6 million messages a month, no credit card)
 2. Copy the API key from the dashboard
 3. Add `ABLY_API_KEY` to both `.env.local` and Vercel
 
@@ -324,14 +254,13 @@ structure of `src/` so a test sits at the same path as the file it covers:
 `src/tests/lib/store.test.ts` for `src/lib/store.ts`,
 `src/tests/app/api/send/route.test.ts` for `src/app/api/send/route.ts`, and so on.
 
-```
-src/tests/
-├── app/api/          every API route
-├── components/       UI components
-├── hooks/            client hooks
-├── lib/              server and shared logic
-└── helpers.ts        shared fixtures and request builders
-```
+Test layout under `src/tests/`:
+
+- `app/api/` every API route
+- `components/` UI components
+- `hooks/` client hooks
+- `lib/` server and shared logic
+- `helpers.ts` shared fixtures and request builders
 
 They cover the parts where a mistake is quiet rather than loud: the message
 store's unread counting and conversation ordering, LINE event parsing including
@@ -344,6 +273,10 @@ several states that are awkward to reproduce by hand. Ably and the API client
 are mocked, which lets the tests force the orderings that cause trouble in
 production: a realtime push arriving before the send response, a refetch landing
 while a message is still in flight, and a retry that fails a second time.
+
+---
+
+## Known limitations
 
 - Blob rewrites the entire file on every save, which suits small volumes. Real
   usage should move to a database with atomic writes.

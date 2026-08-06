@@ -7,7 +7,7 @@ Webchat dashboard สำหรับรับและตอบข้อคว�
 ไม่ต้องมี Node.js server แยก
 
 - **Webchat:** https://line-webchat-one.vercel.app
-- **LINE OA:** `@343bfaqz` — แอดเป็นเพื่อนแล้วทักเข้ามาลองได้เลย
+- **LINE OA:** `@343bfaqz` (แอดเป็นเพื่อนแล้วทักเข้ามาลองได้เลย)
 - **Repo:** https://github.com/roshan-p/line-webchat
 
 ## Features
@@ -25,42 +25,22 @@ Webchat dashboard สำหรับรับและตอบข้อคว�
 
 ## Flow การทำงาน
 
-### 1. ขาเข้า — User ทักมาที่ LINE OA
+### 1. ขาเข้า: User ทักมาที่ LINE OA
 
-```
-LINE User
-   │  พิมพ์ข้อความในแอป LINE
-   ▼
-LINE Platform
-   │  POST พร้อม header x-line-signature
-   ▼
-/api/webhook
-   │  1. ตรวจ HMAC-SHA256 ด้วย LINE_CHANNEL_SECRET  → ไม่ตรง ตอบ 401
-   │  2. ดึงโปรไฟล์ผู้ส่งด้วย getUserProfile()
-   │  3. แปลง event เป็นข้อความด้วย parseMessageFromEvent()
-   ▼
-ingestInboundEvents()          ── บันทึกลง Vercel Blob รอบเดียวทั้ง batch
-   │
-   ▼
-publishRealtimeEvent('inbound')  ── ยิง event บอก browser ว่ามีของใหม่
-```
+1. LINE User พิมพ์ข้อความในแอป LINE
+2. LINE Platform POST มาที่ `/api/webhook` พร้อม header `x-line-signature`
+3. `/api/webhook` ตรวจ HMAC-SHA256 ด้วย `LINE_CHANNEL_SECRET` (ไม่ตรงตอบ 401), ดึงโปรไฟล์ผู้ส่งด้วย `getUserProfile()`, แปลง event เป็นข้อความด้วย `parseMessageFromEvent()`
+4. `ingestInboundEvents()` บันทึกลง Vercel Blob รอบเดียวทั้ง batch
+5. `publishRealtimeEvent('inbound')` ยิง event บอก browser ว่ามีของใหม่
 
 จุดสำคัญคือ **publish หลังบันทึกเสร็จเท่านั้น** ไม่งั้น browser จะรีบมาดึงข้อมูล
 ก่อนที่ข้อความจะถูกเขียนลง storage แล้วได้ข้อมูลเก่ากลับไป
 
-### 2. ขาออก — Admin ตอบกลับ
+### 2. ขาออก: Admin ตอบกลับ
 
-```
-Webchat UI
-   │  พิมพ์แล้วกดส่ง
-   ▼
-/api/send
-   │  1. pushTextMessage() → LINE Push API → เด้งเข้าแอป LINE ของ User
-   │  2. addMessage() บันทึกลง storage
-   │  3. publishRealtimeEvent('outbound') ให้แท็บอื่นเห็นด้วย
-   ▼
-ตอบ message กลับไปให้ UI สลับแทน bubble ที่แสดงไว้ล่วงหน้า
-```
+1. Webchat UI: พิมพ์แล้วกดส่ง
+2. `/api/send` เรียก `pushTextMessage()` (LINE Push API, เด้งเข้าแอป LINE ของ User), `addMessage()` บันทึกลง storage, และ `publishRealtimeEvent('outbound')` ให้แท็บอื่นเห็นด้วย
+3. API ตอบ message กลับไปให้ UI สลับแทน bubble ที่แสดงไว้ล่วงหน้า
 
 bubble จะขึ้นทันทีที่กดส่ง โดยจางลงและเขียนว่า "กำลังส่ง" ถ้าส่งไม่สำเร็จ
 bubble จะยังอยู่ที่เดิมและมีปุ่มสีแดงเล็กๆ ให้กดส่งใหม่ทางด้านซ้าย
@@ -68,23 +48,11 @@ bubble จะยังอยู่ที่เดิมและมีปุ่�
 
 ### 3. การอัปเดตหน้าจอ
 
-```
-useServerConfig()  ── GET /api/health  → รู้ว่า server เปิด Ably ไว้หรือไม่
-        │
-        ▼
-useChat(realtimeEnabled)
-        │
-        ├── useRealtime()  ── โหลด Ably จาก CDN
-        │                  ── ขอ token จาก /api/ably/auth
-        │                  ── subscribe channel "line-webchat"
-        │                        │
-        │                        ▼ เมื่อมี event เข้ามา
-        │                  โหลด users ใหม่ + โหลด messages ถ้าเป็นแชทที่เปิดอยู่
-        │
-        ├── setInterval polling  ── เฉพาะตอน Ably ต่อไม่ติด/ไม่ได้ตั้งค่า (5 วินาที)
-        │
-        └── refetch ตอน reconnect และตอนกลับมาที่แท็บ
-```
+1. `useServerConfig()` เรียก `GET /api/health` เพื่อรู้ว่า server เปิด Ably ไว้หรือไม่
+2. `useChat(realtimeEnabled)` ทำงานสองทางพร้อมกัน:
+   - `useRealtime()` โหลด Ably จาก CDN, ขอ token จาก `/api/ably/auth`, subscribe channel `line-webchat` และเมื่อมี event เข้ามาจะโหลด users ใหม่ + โหลด messages ถ้าเป็นแชทที่เปิดอยู่
+   - `setInterval` polling เฉพาะตอน Ably ต่อไม่ติดหรือไม่ได้ตั้งค่า (5 วินาที)
+3. ตอน reconnect และตอนกลับมาที่แท็บ hook จะ refetch หนึ่งครั้ง
 
 ระหว่างที่ Ably ต่อติดจะไม่มี timer วิ่งเลย ช่องว่างที่ push อาจตกหล่น เช่น
 การเชื่อมต่อหลุด หรือแท็บถูก browser หน่วงไว้ตอนอยู่เบื้องหลัง จะถูกปิดด้วยการ
@@ -101,13 +69,10 @@ LINE ไม่ได้ส่งไฟล์รูปมาให้ตรงๆ
 
 ### 5. Storage
 
-```
-store.ts  ── isPersistenceConfigured() ?
-              │
-              ├── มี BLOB_READ_WRITE_TOKEN → persistent-store.ts → Vercel Blob
-              │
-              └── ไม่มี → in-memory Map (หายเมื่อ cold start, ใช้ตอน dev)
-```
+`store.ts` เช็ค `isPersistenceConfigured()`:
+
+- มี `BLOB_READ_WRITE_TOKEN`: `persistent-store.ts` เขียนลง Vercel Blob
+- ไม่มี: in-memory `Map` (หายเมื่อ cold start, ใช้ตอน dev)
 
 Blob เก็บทุกอย่างเป็นไฟล์ JSON ไฟล์เดียวที่ `line-webchat/store.json` การเขียนแต่ละครั้ง
 คือการโหลดทั้งไฟล์มาแก้แล้วเขียนทับทั้งไฟล์ ด้วยเหตุนี้ webhook ที่เข้ามาพร้อมกันหลาย event
@@ -117,60 +82,20 @@ Blob เก็บทุกอย่างเป็นไฟล์ JSON ไฟล
 
 ## โครงสร้างโปรเจกต์
 
-```
-src/
-├── app/                          หน้าเว็บและ API routes (Next.js App Router)
-│   ├── api/
-│   │   ├── webhook/              รับ event จาก LINE + ตรวจลายเซ็น
-│   │   ├── send/                 ส่งข้อความออกไปหา User
-│   │   ├── users/                รายชื่อคู่สนทนา เรียงตามเวลาล่าสุด
-│   │   ├── messages/[userId]/    ข้อความในแชท + mark ว่าอ่านแล้ว
-│   │   ├── line-content/[messageId]/  proxy ดึงรูปจาก LINE
-│   │   ├── ably/auth/            ออก token ให้ browser subscribe
-│   │   └── health/               บอกว่าใช้ storage อะไร เปิด realtime ไหม
-│   ├── layout.tsx                root layout + viewport config
-│   ├── page.tsx                  ประกอบ ChatSidebar กับ ChatPanel เข้าด้วยกัน
-│   └── globals.css               base styles ที่ดึงสีจาก Tailwind theme
-│
-├── components/                   UI ล้วนๆ ไม่มี logic การดึงข้อมูล
-│   ├── ChatSidebar.tsx           รายชื่อแชทฝั่งซ้าย + สถานะการเชื่อมต่อ
-│   ├── ConversationItem.tsx      หนึ่งแถวในรายชื่อ
-│   ├── SidebarSkeleton.tsx       placeholder ตอนโหลด
-│   ├── ChatPanel.tsx             ฝั่งขวาทั้งหมด หรือ empty state
-│   ├── ChatHeader.tsx            หัวแชท + ปุ่มย้อนกลับบนมือถือ
-│   ├── MessageList.tsx           รายการข้อความ + auto scroll ลงล่าง
-│   ├── MessageBubble.tsx         bubble เดียว รองรับข้อความ รูป และปุ่มส่งใหม่
-│   ├── MessageComposer.tsx       ช่องพิมพ์ (ถือ state ของ draft เอง)
-│   ├── StorageWarningBanner.tsx  เตือนเมื่อยังไม่ได้ตั้ง Blob
-│   ├── Avatar.tsx                รูปโปรไฟล์ หรือตัวอักษรแรกของชื่อ
-│   ├── Spinner.tsx               spinner + LoadingState
-│   └── icons.tsx                 SVG ทั้งหมดรวมไว้ที่เดียว
-│
-├── hooks/                        state และ side effects
-│   ├── useChat.ts                หัวใจหลัก: users, messages, polling, ส่งข้อความ
-│   ├── useRealtime.ts            เชื่อมต่อ Ably และ subscribe
-│   └── useServerConfig.ts        เช็คว่า server รองรับอะไรบ้าง
-│
-├── lib/                          logic ที่ไม่ผูกกับ React
-│   ├── line.ts                   คุยกับ LINE API (profile, push, parse, content)
-│   ├── ably.ts                   publish event และออก token (ฝั่ง server)
-│   ├── store.ts                  เลือกใช้ Blob หรือ memory
-│   ├── persistent-store.ts       อ่าน/เขียนข้อมูลบน Blob
-│   ├── blob-store.ts             ติดต่อ Vercel Blob SDK โดยตรง
-│   ├── store-types.ts            type ของข้อมูลที่เก็บ
-│   ├── api-client.ts             fetch ทุกเส้นจากฝั่ง browser
-│   ├── constants.ts              ค่าคงที่ เช่นช่วง polling ชื่อ channel
-│   ├── i18n.ts                   ข้อความภาษาไทยทั้งหมด
-│   └── format.ts                 จัดรูปแบบเวลาและชื่อ
-│
-├── types/
-│   └── chat.ts                   type ฝั่ง client (derive จาก store-types)
-│
-└── tests/                        โครงเดียวกับโฟลเดอร์ข้างบน ไฟล์ละหนึ่งเทสต์
-    ├── components/
-    ├── hooks/
-    └── lib/
-```
+- `src/app/` หน้าเว็บและ API routes (Next.js App Router)
+  - `api/webhook/` รับ event จาก LINE + ตรวจลายเซ็น
+  - `api/send/` ส่งข้อความออกไปหา User
+  - `api/users/` รายชื่อคู่สนทนา เรียงตามเวลาล่าสุด
+  - `api/messages/[userId]/` ข้อความในแชท + mark ว่าอ่านแล้ว
+  - `api/line-content/[messageId]/` proxy ดึงรูปจาก LINE
+  - `api/ably/auth/` ออก token ให้ browser subscribe
+  - `api/health/` บอกว่าใช้ storage อะไร เปิด realtime ไหม
+  - `layout.tsx`, `page.tsx`, `globals.css`
+- `src/components/` UI ล้วนๆ ไม่มี logic การดึงข้อมูล
+- `src/hooks/` state และ side effects (`useChat.ts`, `useRealtime.ts`, `useServerConfig.ts`)
+- `src/lib/` logic ที่ไม่ผูกกับ React
+- `src/types/chat.ts` type ฝั่ง client
+- `src/tests/` โครงเดียวกับโฟลเดอร์ข้างบน ไฟล์ละหนึ่งเทสต์
 
 ### หลักการแบ่งชั้น
 
@@ -294,8 +219,8 @@ npx ngrok http 3000
 ถ้าตั้ง `ABLY_API_KEY` ระบบจะ push ทันทีที่มีคนทักเข้ามา และหยุด polling
 ไปเลย มุมบนซ้ายจะมีจุดสีบอกสถานะว่ากำลังใช้โหมดไหนอยู่
 
-1. สมัคร [Ably](https://ably.com) — free tier ให้ 200 concurrent connections
-   และ 6 ล้าน messages ต่อเดือน ไม่ต้องใช้บัตรเครดิต
+1. สมัคร [Ably](https://ably.com) (free tier: 200 concurrent connections
+   และ 6 ล้าน messages ต่อเดือน ไม่ต้องใช้บัตรเครดิต)
 2. คัดลอก API key จาก dashboard
 3. เพิ่ม env var `ABLY_API_KEY` ทั้งใน `.env.local` และ Vercel
 
@@ -317,14 +242,13 @@ npm run test:watch
 คู่กับ `src/lib/store.ts` และ `src/tests/app/api/send/route.test.ts` คู่กับ
 `src/app/api/send/route.ts`
 
-```
-src/tests/
-├── app/api/          ทุก API route
-├── components/       UI components
-├── hooks/            client hooks
-├── lib/              logic ฝั่ง server และ shared
-└── helpers.ts        fixture และ request builder ร่วม
-```
+โครงเทสต์ภายใต้ `src/tests/`:
+
+- `app/api/` ทุก API route
+- `components/` UI components
+- `hooks/` client hooks
+- `lib/` logic ฝั่ง server และ shared
+- `helpers.ts` fixture และ request builder ร่วม
 
 สิ่งที่เลือกมาคุมคือจุดที่พังแบบเงียบๆ ไม่ใช่พังแบบเห็นชัด ได้แก่การนับ unread กับ
 การเรียงลำดับแชทใน store, การ parse event จาก LINE รวมถึงชนิดที่ UI แสดงไม่ได้,
