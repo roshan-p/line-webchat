@@ -8,7 +8,7 @@ export const t = {
   },
   storage: {
     warning:
-      'แชทเก็บใน memory ชั่วคราว อาจหายเมื่อ server restart ควรตั้ง Vercel Blob หรือ Upstash Redis',
+      'แชทเก็บใน memory ชั่วคราว อาจหายเมื่อ server restart ควรตั้งค่า Vercel Blob',
   },
   sidebar: {
     loading: 'กำลังโหลดรายชื่อแชท...',

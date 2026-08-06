@@ -6,8 +6,7 @@ import {
   getUserProfile,
   parseMessageFromEvent,
 } from '@/lib/line';
-import { ingestInboundEvents } from '@/lib/redis-store';
-import { isPersistenceConfigured } from '@/lib/redis-store';
+import { ingestInboundEvents, isPersistenceConfigured } from '@/lib/persistent-store';
 import { addMessage, upsertUserProfile } from '@/lib/store';
 import { publishRealtimeEvent } from '@/lib/ably';
 import crypto from 'crypto';

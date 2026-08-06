@@ -1,6 +1,6 @@
 import type { ChatMessage as StoredMessage } from '@/lib/store-types';
 
-export type { ChatUser, MessageDirection, MessageType } from '@/lib/store-types';
+export type { ChatUser } from '@/lib/store-types';
 
 /**
  * Messages stored before image support landed have no `messageType`, so the

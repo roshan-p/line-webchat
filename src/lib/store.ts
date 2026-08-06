@@ -11,10 +11,10 @@ import {
   isPersistenceConfigured,
   markUserReadPersisted,
   upsertUserProfilePersisted,
-} from './redis-store';
+} from './persistent-store';
 
 export type { ChatMessage, ChatUser, MessageDirection };
-export { getStorageBackend, isPersistenceConfigured } from './redis-store';
+export { getStorageBackend, isPersistenceConfigured } from './persistent-store';
 
 interface MemoryStore {
   users: Map<string, ChatUser>;

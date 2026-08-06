@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getStorageBackend, isPersistenceConfigured } from '@/lib/redis-store';
+import { getStorageBackend, isPersistenceConfigured } from '@/lib/persistent-store';
 import { getUsers } from '@/lib/store';
 import { isAblyConfigured } from '@/lib/ably';
 

@@ -25,3 +25,9 @@ export interface AddMessageOptions {
   lineMessageId?: string;
   profile?: { displayName: string; pictureUrl?: string };
 }
+
+/** Whole-store snapshot as it is serialised to durable storage. */
+export interface PersistedStore {
+  users: Record<string, ChatUser>;
+  messages: Record<string, ChatMessage[]>;
+}

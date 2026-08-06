@@ -1,5 +1,5 @@
 import { get, put } from '@vercel/blob';
-import type { PersistedStore } from './redis-store';
+import type { PersistedStore } from './store-types';
 
 const BLOB_PATH = 'line-webchat/store.json';
 

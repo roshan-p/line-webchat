@@ -1,8 +1,7 @@
 import Ably from 'ably';
+import { REALTIME_CHANNEL } from './constants';
 
-export const ABLY_CHANNEL = 'line-webchat';
-
-export type RealtimeEventName = 'inbound' | 'outbound';
+type RealtimeEventName = 'inbound' | 'outbound';
 
 export interface RealtimeEvent {
   userId: string;
@@ -36,7 +35,7 @@ export async function publishRealtimeEvent(
 
   try {
     const event: RealtimeEvent = { userId, timestamp: Date.now() };
-    await client.channels.get(ABLY_CHANNEL).publish(name, event);
+    await client.channels.get(REALTIME_CHANNEL).publish(name, event);
   } catch (error) {
     console.error('Ably publish failed:', error);
   }
@@ -48,6 +47,6 @@ export async function createTokenRequest(clientId: string) {
 
   return client.auth.createTokenRequest({
     clientId,
-    capability: { [ABLY_CHANNEL]: ['subscribe'] },
+    capability: { [REALTIME_CHANNEL]: ['subscribe'] },
   });
 }

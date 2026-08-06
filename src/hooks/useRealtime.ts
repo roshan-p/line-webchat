@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Realtime, RealtimeChannel } from 'ably';
-
-const CHANNEL = 'line-webchat';
+import { REALTIME_CHANNEL } from '@/lib/constants';
+import type { RealtimeEvent } from '@/lib/ably';
 
 // Bundling Ably fails to compile: its published build uses `super()` inside an
 // arrow function, which the Next.js SWC loader cannot parse. Loading the
@@ -11,11 +11,6 @@ const CHANNEL = 'line-webchat';
 const ABLY_CDN = 'https://cdn.ably.com/lib/ably.min-2.js';
 
 export type RealtimeStatus = 'disabled' | 'connecting' | 'connected' | 'error';
-
-interface RealtimeEvent {
-  userId: string;
-  timestamp: number;
-}
 
 interface AblyGlobal {
   Realtime: new (options: Record<string, unknown>) => Realtime;
@@ -94,7 +89,7 @@ export function useRealtime(
         client.connection.on('disconnected', () => setStatus('connecting'));
         client.connection.on('failed', () => setStatus('error'));
 
-        channel = client.channels.get(CHANNEL);
+        channel = client.channels.get(REALTIME_CHANNEL);
         channel.subscribe((message) => {
           handlerRef.current(message.data as RealtimeEvent);
         });

@@ -1,6 +1,6 @@
 import { Client, WebhookEvent, TextMessage } from '@line/bot-sdk';
 
-export interface ParsedLineMessage {
+interface ParsedLineMessage {
   messageType: 'text' | 'image';
   text: string;
   lineMessageId?: string;
@@ -19,7 +19,7 @@ export function getLineConfig() {
   return { channelAccessToken, channelSecret };
 }
 
-export function getLineClient(): Client {
+function getLineClient(): Client {
   const { channelAccessToken, channelSecret } = getLineConfig();
   return new Client({ channelAccessToken, channelSecret });
 }
