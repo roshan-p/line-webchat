@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { WebhookEvent } from '@line/bot-sdk';
 import {
-  getLineConfig,
+  getChannelSecret,
   getUserIdFromEvent,
   getUserProfile,
   parseMessageFromEvent,
@@ -16,12 +16,16 @@ export const dynamic = 'force-dynamic';
 
 function verifySignature(body: string, signature: string | null): boolean {
   if (!signature) return false;
-  const { channelSecret } = getLineConfig();
-  const hash = crypto
-    .createHmac('SHA256', channelSecret)
+
+  const expected = crypto
+    .createHmac('SHA256', getChannelSecret())
     .update(body)
-    .digest('base64');
-  return hash === signature;
+    .digest();
+  const received = Buffer.from(signature, 'base64');
+
+  return (
+    expected.length === received.length && crypto.timingSafeEqual(expected, received)
+  );
 }
 
 async function handleEvents(events: WebhookEvent[]) {

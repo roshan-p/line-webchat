@@ -6,25 +6,37 @@ interface ParsedLineMessage {
   lineMessageId?: string;
 }
 
-export function getLineConfig() {
-  const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  const channelSecret = process.env.LINE_CHANNEL_SECRET;
+/**
+ * Local development has no way to reach LINE: webhooks point at the deployed
+ * URL, and pushing to a made-up user id is rejected. Setting LINE_MOCK=1 stubs
+ * both directions so the UI can be exercised end to end offline.
+ */
+export function isLineMocked(): boolean {
+  return process.env.LINE_MOCK === '1';
+}
 
-  if (!channelAccessToken || !channelSecret) {
-    throw new Error(
-      'Missing LINE_CHANNEL_ACCESS_TOKEN or LINE_CHANNEL_SECRET. Add them in .env.local',
-    );
-  }
+function requireEnv(name: 'LINE_CHANNEL_ACCESS_TOKEN' | 'LINE_CHANNEL_SECRET'): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing ${name}. Add it in .env.local`);
+  return value;
+}
 
-  return { channelAccessToken, channelSecret };
+export function getChannelSecret(): string {
+  return requireEnv('LINE_CHANNEL_SECRET');
 }
 
 function getLineClient(): Client {
-  const { channelAccessToken, channelSecret } = getLineConfig();
-  return new Client({ channelAccessToken, channelSecret });
+  return new Client({
+    channelAccessToken: requireEnv('LINE_CHANNEL_ACCESS_TOKEN'),
+    channelSecret: requireEnv('LINE_CHANNEL_SECRET'),
+  });
 }
 
 export async function getUserProfile(userId: string) {
+  if (isLineMocked()) {
+    return { displayName: `Local ${userId.slice(-4)}` };
+  }
+
   const client = getLineClient();
   try {
     const profile = await client.getProfile(userId);
@@ -40,6 +52,11 @@ export async function getUserProfile(userId: string) {
 }
 
 export async function pushTextMessage(userId: string, text: string) {
+  if (isLineMocked()) {
+    console.log(`[LINE_MOCK] push to ${userId}: ${text}`);
+    return;
+  }
+
   const client = getLineClient();
   const message: TextMessage = { type: 'text', text };
   await client.pushMessage(userId, message);
@@ -74,11 +91,10 @@ export function getUserIdFromEvent(event: WebhookEvent): string | null {
 }
 
 export async function fetchLineMessageContent(messageId: string) {
-  const { channelAccessToken } = getLineConfig();
   const response = await fetch(
     `https://api-data.line.me/v2/bot/message/${messageId}/content`,
     {
-      headers: { Authorization: `Bearer ${channelAccessToken}` },
+      headers: { Authorization: `Bearer ${requireEnv('LINE_CHANNEL_ACCESS_TOKEN')}` },
     },
   );
 

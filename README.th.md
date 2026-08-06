@@ -194,6 +194,7 @@ object ข้างๆ กัน ส่วนสีทั้งหมดนิ�
 | `NEXT_PUBLIC_APP_URL` | ใช่ | แสดง webhook URL ใน `/api/health` |
 | `BLOB_READ_WRITE_TOKEN` | แนะนำ | เก็บแชทถาวร ถ้าไม่มีจะใช้ memory |
 | `ABLY_API_KEY` | ทางเลือก | เปิด realtime แทน polling |
+| `LINE_MOCK` | เฉพาะ local | ใส่ `1` เพื่อจำลอง LINE ให้รันแบบออฟไลน์ได้ |
 
 `BLOB_READ_WRITE_TOKEN` จะถูกเพิ่มให้อัตโนมัติเมื่อ connect Blob store ใน Vercel
 
@@ -225,15 +226,33 @@ npm run dev
 
 เปิด http://localhost:3000
 
-### 4. ทดสอบ Webhook ใน Local
+### 4. ทำให้มีแชทขึ้นมาให้เล่น
 
-LINE ต้องยิง webhook มาหาเครื่องเราได้ จึงต้องเปิด tunnel
+ตอนเปิดครั้งแรกจะไม่มีอะไรเลยซึ่งถูกต้องแล้ว เพราะ LINE ยิง webhook ไปที่ URL ที่
+deploy ไว้ เครื่อง local จึงไม่เคยได้รับ และ sidebar ก็ว่างจนไม่มีใครให้ตอบ
+มีสองทางเลือก
+
+**แบบออฟไลน์ ไม่ต้องใช้บัญชี LINE** ตั้ง `LINE_MOCK=1` ใน `.env.local` แล้ว seed
+ข้อมูลเข้าไป
+
+```bash
+npm run seed
+npm run seed -- --user Ualice --text "hello" --count 3
+```
+
+สคริปต์จะเซ็น webhook ด้วย `LINE_CHANNEL_SECRET` ของคุณแล้วยิงเข้า `localhost:3000`
+เหมือนที่ LINE ทำทุกประการ พอเปิด mock ไว้ การตอบกลับจะถูก log ลง terminal แทนการ
+push จริง และโปรไฟล์เป็นของปลอม ทำให้ใช้ UI ได้ครบโดยไม่ต้องมี credentials
+ข้อมูลเก็บใน memory จึงหายทุกครั้งที่รีสตาร์ท
+
+**แบบต่อ LINE จริง** ไม่ต้องตั้ง `LINE_MOCK` แล้วเปิด tunnel มาที่เครื่อง
 
 ```bash
 npx ngrok http 3000
 ```
 
-แล้วเอา URL ที่ได้ไปตั้งใน LINE Console เป็น `https://xxxx.ngrok.io/api/webhook`
+จากนั้นตั้ง webhook URL ใน LINE Console เป็น `https://xxxx.ngrok.io/api/webhook`
+แล้วทักเข้า OA จากมือถือได้เลย
 
 ---
 

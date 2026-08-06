@@ -197,6 +197,7 @@ more object next to it. Colours are defined as `line-*` tokens in
 | `NEXT_PUBLIC_APP_URL` | yes | shown as the webhook URL in `/api/health` |
 | `BLOB_READ_WRITE_TOKEN` | recommended | persist chats; falls back to memory without it |
 | `ABLY_API_KEY` | optional | enables realtime instead of polling |
+| `LINE_MOCK` | local only | `1` stubs out LINE so the app runs offline |
 
 Vercel adds `BLOB_READ_WRITE_TOKEN` automatically when you connect a Blob store.
 
@@ -229,15 +230,34 @@ npm run dev
 
 Open http://localhost:3000
 
-### 4. Test the webhook locally
+### 4. Get a conversation on screen
 
-LINE has to reach your machine, so expose it through a tunnel:
+Nothing shows up at first, and that is expected: LINE delivers webhooks to the
+deployed URL, so a local server never receives one and the sidebar has nobody in
+it to reply to. There are two ways around it.
+
+**Offline, no LINE account needed.** Set `LINE_MOCK=1` in `.env.local` and seed a
+conversation:
+
+```bash
+npm run seed
+npm run seed -- --user Ualice --text "hello" --count 3
+```
+
+The script signs a webhook with your `LINE_CHANNEL_SECRET` and posts it to
+`localhost:3000`, exactly as LINE would. With the mock on, replies are logged to
+the terminal instead of being pushed, and profiles are faked, so the entire UI
+works without credentials. Storage is in memory, so it all resets on restart.
+
+**Against the real LINE account.** Leave `LINE_MOCK` unset and tunnel to your
+machine:
 
 ```bash
 npx ngrok http 3000
 ```
 
-Then set the webhook URL in the LINE Console to `https://xxxx.ngrok.io/api/webhook`.
+Then point the webhook URL in the LINE Console at
+`https://xxxx.ngrok.io/api/webhook` and message the OA from your phone.
 
 ---
 
