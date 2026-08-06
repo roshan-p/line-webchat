@@ -1,293 +1,300 @@
 # LINE Webchat
 
-Webchat dashboard สำหรับรับและตอบข้อความจาก LINE Official Account (LINE OA)
-สร้างด้วย **Next.js 15 + TypeScript** โดยใช้ API Routes เป็น backend ในตัว
-ไม่ต้องมี Node.js server แยก
+**English** · [อ่านภาษาไทย](README.th.md)
+
+A webchat dashboard for receiving and replying to messages from a LINE Official
+Account. Built with **Next.js 15 + TypeScript**, using API Routes as the backend
+so no separate Node.js server is needed.
 
 - **Webchat:** https://line-webchat-one.vercel.app
 - **Repo:** https://github.com/roshan-p/line-webchat
 
 ## Features
 
-- รับข้อความจาก LINE OA ผ่าน Webhook พร้อมตรวจสอบลายเซ็น
-- ตอบกลับ User ผ่าน LINE Push Message API
-- แสดงรายชื่อ User ที่ทักเข้ามา พร้อมรูปโปรไฟล์ เวลาล่าสุด และจำนวนข้อความที่ยังไม่อ่าน
-- รองรับข้อความรูปภาพจาก LINE
-- อัปเดตแบบ realtime ผ่าน Ably (ถ้าตั้งค่าไว้) โดยมี polling เป็น fallback
-- เก็บข้อมูลถาวรใน Vercel Blob
-- Responsive ใช้งานได้ทั้งเดสก์ท็อปและมือถือ
+- Receives LINE messages through a signature-verified webhook
+- Replies to users through the LINE Push Message API
+- Lists everyone who has messaged in, with avatar, last message time and unread count
+- Displays image messages sent from LINE
+- Realtime updates through Ably when configured, with polling as a fallback
+- Persists conversations in Vercel Blob
+- Responsive on both desktop and mobile
 
 ---
 
-## Flow การทำงาน
+## How it works
 
-### 1. ขาเข้า — User ทักมาที่ LINE OA
+### 1. Inbound — a user messages the LINE OA
 
 ```
 LINE User
-   │  พิมพ์ข้อความในแอป LINE
+   │  sends a message in the LINE app
    ▼
 LINE Platform
-   │  POST พร้อม header x-line-signature
+   │  POST with an x-line-signature header
    ▼
 /api/webhook
-   │  1. ตรวจ HMAC-SHA256 ด้วย LINE_CHANNEL_SECRET  → ไม่ตรง ตอบ 401
-   │  2. ดึงโปรไฟล์ผู้ส่งด้วย getUserProfile()
-   │  3. แปลง event เป็นข้อความด้วย parseMessageFromEvent()
+   │  1. verify HMAC-SHA256 against LINE_CHANNEL_SECRET → 401 on mismatch
+   │  2. look up the sender with getUserProfile()
+   │  3. turn the event into a message with parseMessageFromEvent()
    ▼
-ingestInboundEvents()          ── บันทึกลง Vercel Blob รอบเดียวทั้ง batch
+ingestInboundEvents()          ── writes the whole batch to Vercel Blob at once
    │
    ▼
-publishRealtimeEvent('inbound')  ── ยิง event บอก browser ว่ามีของใหม่
+publishRealtimeEvent('inbound')  ── tells the browser something changed
 ```
 
-จุดสำคัญคือ **publish หลังบันทึกเสร็จเท่านั้น** ไม่งั้น browser จะรีบมาดึงข้อมูล
-ก่อนที่ข้อความจะถูกเขียนลง storage แล้วได้ข้อมูลเก่ากลับไป
+The publish deliberately happens **after** the write settles. Otherwise the
+browser would refetch before the message reaches storage and get stale data back.
 
-### 2. ขาออก — Admin ตอบกลับ
+### 2. Outbound — an admin replies
 
 ```
 Webchat UI
-   │  พิมพ์แล้วกดส่ง
+   │  types and hits send
    ▼
 /api/send
-   │  1. pushTextMessage() → LINE Push API → เด้งเข้าแอป LINE ของ User
-   │  2. addMessage() บันทึกลง storage
-   │  3. publishRealtimeEvent('outbound') ให้แท็บอื่นเห็นด้วย
+   │  1. pushTextMessage() → LINE Push API → arrives in the user's LINE app
+   │  2. addMessage() writes it to storage
+   │  3. publishRealtimeEvent('outbound') so other open tabs see it too
    ▼
-ตอบ message กลับไปให้ UI แสดงผลทันทีโดยไม่ต้องรอ refetch
+returns the message so the UI can render it without waiting for a refetch
 ```
 
-### 3. การอัปเดตหน้าจอ
+### 3. Keeping the screen up to date
 
 ```
-useServerConfig()  ── GET /api/health  → รู้ว่า server เปิด Ably ไว้หรือไม่
+useServerConfig()  ── GET /api/health  → is Ably configured on the server?
         │
         ▼
 useChat(realtimeEnabled)
         │
-        ├── useRealtime()  ── โหลด Ably จาก CDN
-        │                  ── ขอ token จาก /api/ably/auth
-        │                  ── subscribe channel "line-webchat"
+        ├── useRealtime()  ── loads Ably from its CDN
+        │                  ── requests a token from /api/ably/auth
+        │                  ── subscribes to the "line-webchat" channel
         │                        │
-        │                        ▼ เมื่อมี event เข้ามา
-        │                  โหลด users ใหม่ + โหลด messages ถ้าเป็นแชทที่เปิดอยู่
+        │                        ▼ on each event
+        │                  reload users, and reload messages if that chat is open
         │
-        └── setInterval polling  ── ต่อ Ably ติด: ทุก 30 วินาที (safety net)
-                                 ── ต่อไม่ติด/ไม่ได้ตั้งค่า: ทุก 5 วินาที
+        └── setInterval polling  ── Ably connected: every 30s as a safety net
+                                 ── not connected or not configured: every 5s
 ```
 
-Vercel เป็น serverless จึงเปิด WebSocket server ค้างไว้เองไม่ได้ (Socket.IO ใช้ไม่ได้)
-Ably ทำหน้าที่เป็นตัวกลางรับ publish จาก API route แล้วกระจายต่อให้ browser
+Vercel is serverless and cannot hold a WebSocket server open, which rules out
+Socket.IO. Ably sits in between: API routes publish to it, and it fans the event
+out to every connected browser.
 
-### 4. รูปภาพ
+### 4. Images
 
-LINE ไม่ได้ส่งไฟล์รูปมาให้ตรงๆ ส่งมาแค่ `messageId` เราจึงเก็บ id ไว้แล้วให้ UI
-ชี้ `<img src>` มาที่ `/api/line-content/[messageId]` ซึ่งเป็น proxy ที่ไปดึงไฟล์จริง
-จาก LINE โดยแนบ access token ให้ วิธีนี้ทำให้ token ไม่หลุดไปฝั่ง browser
+LINE does not send the image itself, only a `messageId`. The id is stored and the
+UI points its `<img src>` at `/api/line-content/[messageId]`, a proxy that fetches
+the real file from LINE with the access token attached. That keeps the token on
+the server.
 
 ### 5. Storage
 
 ```
 store.ts  ── isPersistenceConfigured() ?
               │
-              ├── มี BLOB_READ_WRITE_TOKEN → persistent-store.ts → Vercel Blob
+              ├── BLOB_READ_WRITE_TOKEN set → persistent-store.ts → Vercel Blob
               │
-              └── ไม่มี → in-memory Map (หายเมื่อ cold start, ใช้ตอน dev)
+              └── not set → in-memory Map (lost on cold start, dev only)
 ```
 
-Blob เก็บทุกอย่างเป็นไฟล์ JSON ไฟล์เดียวที่ `line-webchat/store.json` การเขียนแต่ละครั้ง
-คือการโหลดทั้งไฟล์มาแก้แล้วเขียนทับทั้งไฟล์ ด้วยเหตุนี้ webhook ที่เข้ามาพร้อมกันหลาย event
-จึงถูกรวมเป็น batch เดียวใน `ingestInboundEvents()` เพื่อไม่ให้เขียนทับกันเอง
+Blob keeps everything in a single JSON file at `line-webchat/store.json`. Every
+write loads the whole file, edits it and writes it back, so concurrent webhook
+events are merged into one batch in `ingestInboundEvents()` to stop them from
+overwriting each other.
 
 ---
 
-## โครงสร้างโปรเจกต์
+## Project structure
 
 ```
 src/
-├── app/                          หน้าเว็บและ API routes (Next.js App Router)
+├── app/                          pages and API routes (Next.js App Router)
 │   ├── api/
-│   │   ├── webhook/              รับ event จาก LINE + ตรวจลายเซ็น
-│   │   ├── send/                 ส่งข้อความออกไปหา User
-│   │   ├── users/                รายชื่อคู่สนทนา เรียงตามเวลาล่าสุด
-│   │   ├── messages/[userId]/    ข้อความในแชท + mark ว่าอ่านแล้ว
-│   │   ├── line-content/[messageId]/  proxy ดึงรูปจาก LINE
-│   │   ├── ably/auth/            ออก token ให้ browser subscribe
-│   │   └── health/               บอกว่าใช้ storage อะไร เปิด realtime ไหม
-│   ├── layout.tsx                root layout + viewport config
-│   ├── page.tsx                  ประกอบ ChatSidebar กับ ChatPanel เข้าด้วยกัน
-│   └── globals.css               base styles ที่ดึงสีจาก Tailwind theme
+│   │   ├── webhook/              receives LINE events, verifies the signature
+│   │   ├── send/                 pushes a message to a user
+│   │   ├── users/                conversation list, newest first
+│   │   ├── messages/[userId]/    messages in a chat, optionally marking them read
+│   │   ├── line-content/[messageId]/  proxies images from LINE
+│   │   ├── ably/auth/            issues a subscribe-only realtime token
+│   │   └── health/               reports the storage backend and realtime status
+│   ├── layout.tsx                root layout and viewport config
+│   ├── page.tsx                  composes ChatSidebar and ChatPanel
+│   └── globals.css               base styles pulled from the Tailwind theme
 │
-├── components/                   UI ล้วนๆ ไม่มี logic การดึงข้อมูล
-│   ├── ChatSidebar.tsx           รายชื่อแชทฝั่งซ้าย + สถานะการเชื่อมต่อ
-│   ├── ConversationItem.tsx      หนึ่งแถวในรายชื่อ
-│   ├── SidebarSkeleton.tsx       placeholder ตอนโหลด
-│   ├── ChatPanel.tsx             ฝั่งขวาทั้งหมด หรือ empty state
-│   ├── ChatHeader.tsx            หัวแชท + ปุ่มย้อนกลับบนมือถือ
-│   ├── MessageList.tsx           รายการข้อความ + auto scroll ลงล่าง
-│   ├── MessageBubble.tsx         bubble เดียว รองรับทั้งข้อความและรูป
-│   ├── MessageComposer.tsx       ช่องพิมพ์ (ถือ state ของ draft เอง)
-│   ├── StorageWarningBanner.tsx  เตือนเมื่อยังไม่ได้ตั้ง Blob
-│   ├── Avatar.tsx                รูปโปรไฟล์ หรือตัวอักษรแรกของชื่อ
-│   ├── Spinner.tsx               spinner + LoadingState
-│   └── icons.tsx                 SVG ทั้งหมดรวมไว้ที่เดียว
+├── components/                   presentation only, no data fetching
+│   ├── ChatSidebar.tsx           conversation list and connection status
+│   ├── ConversationItem.tsx      a single row in that list
+│   ├── SidebarSkeleton.tsx       loading placeholder
+│   ├── ChatPanel.tsx             the whole right side, or the empty state
+│   ├── ChatHeader.tsx            chat header with a mobile back button
+│   ├── MessageList.tsx           the messages, scrolled to the bottom
+│   ├── MessageBubble.tsx         one bubble, text or image
+│   ├── MessageComposer.tsx       the input, owning its own draft state
+│   ├── StorageWarningBanner.tsx  shown when Blob is not configured
+│   ├── Avatar.tsx                profile picture, or the first letter of the name
+│   ├── Spinner.tsx               spinner and LoadingState
+│   └── icons.tsx                 every SVG in one place
 │
-├── hooks/                        state และ side effects
-│   ├── useChat.ts                หัวใจหลัก: users, messages, polling, ส่งข้อความ
-│   ├── useRealtime.ts            เชื่อมต่อ Ably และ subscribe
-│   └── useServerConfig.ts        เช็คว่า server รองรับอะไรบ้าง
+├── hooks/                        state and side effects
+│   ├── useChat.ts                the core: users, messages, polling, sending
+│   ├── useRealtime.ts            connects to Ably and subscribes
+│   └── useServerConfig.ts        asks the server what it supports
 │
-├── lib/                          logic ที่ไม่ผูกกับ React
-│   ├── line.ts                   คุยกับ LINE API (profile, push, parse, content)
-│   ├── ably.ts                   publish event และออก token (ฝั่ง server)
-│   ├── store.ts                  เลือกใช้ Blob หรือ memory
-│   ├── persistent-store.ts       อ่าน/เขียนข้อมูลบน Blob
-│   ├── blob-store.ts             ติดต่อ Vercel Blob SDK โดยตรง
-│   ├── store-types.ts            type ของข้อมูลที่เก็บ
-│   ├── api-client.ts             fetch ทุกเส้นจากฝั่ง browser
-│   ├── constants.ts              ค่าคงที่ เช่นช่วง polling ชื่อ channel
-│   ├── i18n.ts                   ข้อความภาษาไทยทั้งหมด
-│   └── format.ts                 จัดรูปแบบเวลาและชื่อ
+├── lib/                          logic with no React dependency
+│   ├── line.ts                   talks to LINE (profile, push, parse, content)
+│   ├── ably.ts                   publishes events and issues tokens, server side
+│   ├── store.ts                  picks between Blob and memory
+│   ├── persistent-store.ts       reads and writes the Blob-backed store
+│   ├── blob-store.ts             the only place that touches the Vercel Blob SDK
+│   ├── store-types.ts            shapes of the stored data
+│   ├── api-client.ts             every browser-side fetch
+│   ├── constants.ts              poll intervals, channel name, locale
+│   ├── i18n.ts                   all Thai UI copy
+│   └── format.ts                 time and name formatting
 │
 └── types/
-    └── chat.ts                   type ฝั่ง client (derive จาก store-types)
+    └── chat.ts                   client-facing types, derived from store-types
 ```
 
-### หลักการแบ่งชั้น
+### Layering rules
 
-แต่ละชั้นรู้จักแค่ชั้นที่อยู่ต่ำกว่าตัวเอง ไม่ย้อนกลับขึ้นไป
+Each layer only knows about the ones below it, never the other way around.
 
-| ชั้น | หน้าที่ | ห้ามทำ |
+| Layer | Responsibility | Must not |
 |---|---|---|
-| `components/` | แสดงผลอย่างเดียว รับข้อมูลผ่าน props | เรียก `fetch` เอง |
-| `hooks/` | ถือ state และเรียก API | เขียน JSX |
-| `lib/api-client.ts` | รวม `fetch` ทุกเส้นไว้ที่เดียว | รู้จัก React |
-| `app/api/` | ตรวจ input, เรียก lib, ตอบ JSON | มี business logic เยอะ |
-| `lib/` (ที่เหลือ) | คุยกับบริการภายนอกและจัดการข้อมูล | รู้จัก HTTP request |
+| `components/` | render, taking everything through props | call `fetch` |
+| `hooks/` | hold state and call the API | contain JSX |
+| `lib/api-client.ts` | every HTTP call in one module | know about React |
+| `app/api/` | validate input, call lib, return JSON | hold business logic |
+| `lib/` (rest) | talk to external services, shape data | know about HTTP requests |
 
-ข้อความภาษาไทยทั้งหมดอยู่ใน `lib/i18n.ts` ไฟล์เดียว ถ้าจะเพิ่มภาษาอังกฤษก็แค่เพิ่ม
-object ข้างๆ กัน ส่วนสีทั้งหมดนิยามใน `tailwind.config.ts` เป็น token ชื่อ `line-*`
-ไม่มีค่า hex ดิบอยู่ใน component ไหนเลย
+All Thai UI copy lives in `lib/i18n.ts`, so adding English would mean adding one
+more object next to it. Colours are defined as `line-*` tokens in
+`tailwind.config.ts`; no component contains a raw hex value.
 
 ---
 
-## Environment Variables
+## Environment variables
 
-| ตัวแปร | จำเป็น | ใช้ทำอะไร |
+| Variable | Required | Purpose |
 |---|---|---|
-| `LINE_CHANNEL_ACCESS_TOKEN` | ใช่ | ส่งข้อความและดึงโปรไฟล์/รูปจาก LINE |
-| `LINE_CHANNEL_SECRET` | ใช่ | ตรวจลายเซ็น webhook |
-| `NEXT_PUBLIC_APP_URL` | ใช่ | แสดง webhook URL ใน `/api/health` |
-| `BLOB_READ_WRITE_TOKEN` | แนะนำ | เก็บแชทถาวร ถ้าไม่มีจะใช้ memory |
-| `ABLY_API_KEY` | ทางเลือก | เปิด realtime แทน polling |
+| `LINE_CHANNEL_ACCESS_TOKEN` | yes | send messages, fetch profiles and images |
+| `LINE_CHANNEL_SECRET` | yes | verify webhook signatures |
+| `NEXT_PUBLIC_APP_URL` | yes | shown as the webhook URL in `/api/health` |
+| `BLOB_READ_WRITE_TOKEN` | recommended | persist chats; falls back to memory without it |
+| `ABLY_API_KEY` | optional | enables realtime instead of polling |
 
-`BLOB_READ_WRITE_TOKEN` จะถูกเพิ่มให้อัตโนมัติเมื่อ connect Blob store ใน Vercel
+Vercel adds `BLOB_READ_WRITE_TOKEN` automatically when you connect a Blob store.
 
 ---
 
-## Quick Start (Local)
+## Quick start (local)
 
-### 1. สร้าง LINE Messaging API Channel
+### 1. Create a LINE Messaging API channel
 
-1. ไปที่ [LINE Developers Console](https://developers.line.biz/console/)
-2. สร้าง Provider แล้วสร้าง LINE Official Account จากนั้นเปิด Messaging API
-   ให้กับ OA นั้นใน [LINE OA Manager](https://manager.line.biz/)
-3. บันทึก **Channel Secret** และออก **Channel Access Token** (long-lived)
-4. เปิด **Use webhook**
-5. ปิด **Auto-reply messages** และ **Greeting messages** เพื่อให้ webchat ตอบเอง
+1. Open the [LINE Developers Console](https://developers.line.biz/console/)
+2. Create a provider, create a LINE Official Account, then enable the Messaging
+   API for it in the [LINE OA Manager](https://manager.line.biz/)
+3. Note the **Channel Secret** and issue a long-lived **Channel Access Token**
+4. Turn on **Use webhook**
+5. Turn off **Auto-reply messages** and **Greeting messages** so the webchat can
+   answer instead
 
-### 2. ตั้งค่า Environment Variables
+### 2. Configure environment variables
 
 ```bash
 cp .env.example .env.local
 ```
 
-### 3. รันโปรเจกต์
+### 3. Run it
 
 ```bash
 npm install
 npm run dev
 ```
 
-เปิด http://localhost:3000
+Open http://localhost:3000
 
-### 4. ทดสอบ Webhook ใน Local
+### 4. Test the webhook locally
 
-LINE ต้องยิง webhook มาหาเครื่องเราได้ จึงต้องเปิด tunnel
+LINE has to reach your machine, so expose it through a tunnel:
 
 ```bash
 npx ngrok http 3000
 ```
 
-แล้วเอา URL ที่ได้ไปตั้งใน LINE Console เป็น `https://xxxx.ngrok.io/api/webhook`
+Then set the webhook URL in the LINE Console to `https://xxxx.ngrok.io/api/webhook`.
 
 ---
 
 ## Deploy to Vercel
 
-1. Push โค้ดขึ้น GitHub
-2. Import project ใน [Vercel](https://vercel.com)
-3. สร้าง Blob store ใน Storage tab แล้ว connect เข้ากับ project
-4. ตั้ง environment variables ตามตารางด้านบน
-5. Deploy แล้วตั้ง Webhook URL ใน LINE Console เป็น
+1. Push to GitHub
+2. Import the project in [Vercel](https://vercel.com)
+3. Create a Blob store under the Storage tab and connect it to the project
+4. Set the environment variables from the table above
+5. Deploy, then point the LINE Console webhook at
    `https://YOUR-APP.vercel.app/api/webhook`
-6. เช็คว่าทุกอย่างพร้อมด้วย `curl https://YOUR-APP.vercel.app/api/health`
+6. Confirm everything is wired up with `curl https://YOUR-APP.vercel.app/api/health`
 
 ---
 
-## API Endpoints
+## API endpoints
 
-| Method | Path | คำอธิบาย |
-|--------|------|----------|
-| POST | `/api/webhook` | รับ event จาก LINE ตอบ 401 ถ้าลายเซ็นไม่ถูก |
-| GET | `/api/users` | รายชื่อคู่สนทนา เรียงตามข้อความล่าสุด |
-| GET | `/api/messages/[userId]` | ข้อความในแชท ใส่ `?markRead=true` เพื่อล้าง unread |
-| POST | `/api/send` | ส่งข้อความ body: `{ userId, text }` |
-| GET | `/api/line-content/[messageId]` | proxy ดึงรูปจาก LINE |
-| GET | `/api/ably/auth` | token ที่มีสิทธิ์ subscribe อย่างเดียว |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/webhook` | receives LINE events, 401 on a bad signature |
+| GET | `/api/users` | conversation list, sorted by most recent message |
+| GET | `/api/messages/[userId]` | messages in a chat; `?markRead=true` clears unread |
+| POST | `/api/send` | sends a message, body `{ userId, text }` |
+| GET | `/api/line-content/[messageId]` | proxies an image from LINE |
+| GET | `/api/ably/auth` | a subscribe-only realtime token |
 | GET | `/api/health` | `{ storage, persistent, realtime, userCount }` |
 
 ---
 
-## Realtime (ทางเลือก)
+## Realtime (optional)
 
-ถ้าไม่ตั้งค่าอะไรเพิ่ม หน้าเว็บจะ poll ทุก 5 วินาที ใช้งานได้แต่มีดีเลย์
+With nothing configured the dashboard polls every 5 seconds. That works, but new
+messages take a moment to appear.
 
-ถ้าตั้ง `ABLY_API_KEY` ระบบจะ push ทันทีที่มีคนทักเข้ามา และลด polling
-เหลือทุก 30 วินาทีไว้เป็น safety net เฉยๆ มุมบนซ้ายจะมีจุดสีบอกสถานะว่า
-กำลังใช้โหมดไหนอยู่
+Setting `ABLY_API_KEY` switches it to push, so messages show up as soon as they
+arrive, and polling drops to every 30 seconds purely as a safety net. A coloured
+dot in the top left shows which mode is active.
 
-1. สมัคร [Ably](https://ably.com) — free tier ให้ 200 concurrent connections
-   และ 6 ล้าน messages ต่อเดือน ไม่ต้องใช้บัตรเครดิต
-2. คัดลอก API key จาก dashboard
-3. เพิ่ม env var `ABLY_API_KEY` ทั้งใน `.env.local` และ Vercel
+1. Sign up for [Ably](https://ably.com) — the free tier covers 200 concurrent
+   connections and 6 million messages a month, with no credit card
+2. Copy the API key from the dashboard
+3. Add `ABLY_API_KEY` to both `.env.local` and Vercel
 
-API key อยู่ฝั่ง server เท่านั้น browser จะขอ token ชั่วคราวผ่าน `/api/ably/auth`
-ซึ่งให้สิทธิ์แค่ subscribe บน channel เดียว publish ไม่ได้ ส่วน Ably client
-โหลดจาก CDN ตอน runtime จึงไม่กินขนาด bundle
-
----
-
-## ข้อจำกัดที่ควรรู้
-
-- Blob เขียนทับทั้งไฟล์ทุกครั้ง เหมาะกับสเกลเล็ก ถ้าใช้งานจริงควรย้ายไป database
-  ที่รองรับ atomic write
-- ถ้าไม่ตั้ง `BLOB_READ_WRITE_TOKEN` ข้อมูลจะหายทุกครั้งที่ Vercel cold start
-  หน้าเว็บจะขึ้นแถบเตือนสีเหลืองให้
-- User ต้อง Add Friend LINE OA ก่อน ถึงจะส่งข้อความหาได้
-- รองรับเฉพาะแชทแบบ 1:1 ยังไม่รองรับกลุ่ม
-- ตอบกลับได้เฉพาะข้อความตัวอักษร ยังส่งรูปออกไม่ได้
+The API key never leaves the server. The browser requests a short-lived token
+from `/api/ably/auth` that can only subscribe to one channel, never publish. The
+Ably client itself loads from a CDN at runtime, so it adds nothing to the bundle.
 
 ---
 
-## Tech Stack
+## Known limitations
 
-| ส่วน | เทคโนโลยี |
+- Blob rewrites the entire file on every save, which suits small volumes. Real
+  usage should move to a database with atomic writes.
+- Without `BLOB_READ_WRITE_TOKEN` the history is lost on every cold start. The UI
+  shows an amber banner when that is the case.
+- A user has to add the LINE OA as a friend before you can message them.
+- Only 1:1 chats are supported, not groups.
+- Replies are text only; sending images out is not implemented.
+
+---
+
+## Tech stack
+
+| Area | Technology |
 |---|---|
 | Framework | Next.js 15 (App Router) + TypeScript |
 | Styling | Tailwind CSS |
 | LINE | @line/bot-sdk (Messaging API) |
-| Realtime | Ably (ทางเลือก) |
+| Realtime | Ably (optional) |
 | Storage | Vercel Blob |
 | Hosting | Vercel |
