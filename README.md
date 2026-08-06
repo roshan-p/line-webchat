@@ -72,6 +72,7 @@ https://xxxx.ngrok.io/api/webhook
    - `LINE_CHANNEL_ACCESS_TOKEN`
    - `LINE_CHANNEL_SECRET`
    - `NEXT_PUBLIC_APP_URL` = URL ของ Vercel app
+   - `ABLY_API_KEY` (ทางเลือก) = เปิด realtime แทน polling
 4. Deploy แล้วตั้ง Webhook URL ใน LINE Console:
    ```
    https://YOUR-APP.vercel.app/api/webhook
@@ -85,7 +86,22 @@ https://xxxx.ngrok.io/api/webhook
 | GET | `/api/users` | รายชื่อ users |
 | GET | `/api/messages/[userId]` | ข้อความของ user |
 | POST | `/api/send` | ส่งข้อความไปหา user |
-| GET | `/api/events` | SSE stream สำหรับ real-time |
+| GET | `/api/ably/auth` | ออก token ให้ client subscribe realtime |
+| GET | `/api/health` | สถานะ storage และ realtime |
+
+## Realtime (ทางเลือก)
+
+ถ้าไม่ตั้งค่าอะไรเพิ่ม หน้าเว็บจะ poll `/api/users` ทุก 5 วินาที ซึ่งใช้งานได้แต่มีดีเลย์
+
+ถ้าตั้ง `ABLY_API_KEY` ระบบจะเปลี่ยนไปใช้ [Ably](https://ably.com) push ข้อความมาทันทีที่มี
+คนทักเข้ามา และลด polling เหลือทุก 30 วินาทีไว้เป็น safety net เฉยๆ
+
+1. สมัคร Ably (free tier: 200 concurrent connections, 6M messages/เดือน ไม่ต้องใช้บัตร)
+2. คัดลอก API key จาก dashboard
+3. เพิ่ม env var `ABLY_API_KEY` ทั้งใน `.env.local` และ Vercel
+
+API key อยู่ฝั่ง server เท่านั้น — browser ขอ token ชั่วคราวที่มีสิทธิ์ subscribe อย่างเดียว
+ผ่าน `/api/ably/auth` ส่วนตัว Ably client โหลดจาก CDN จึงไม่กินขนาด bundle
 
 ## ส่งแบบทดสอบ
 

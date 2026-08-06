@@ -1,6 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRealtime } from '@/hooks/useRealtime';
+
+const LIVE_POLL_MS = 30000;
+const FALLBACK_POLL_MS = 5000;
 
 interface ChatUser {
   userId: string;
@@ -97,6 +101,7 @@ export default function WebchatPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -114,8 +119,8 @@ export default function WebchatPage() {
     }
   }, []);
 
-  const fetchMessages = useCallback(async (userId: string) => {
-    setMessagesLoading(true);
+  const fetchMessages = useCallback(async (userId: string, silent = false) => {
+    if (!silent) setMessagesLoading(true);
     try {
       const res = await fetch(
         `/api/messages/${encodeURIComponent(userId)}?markRead=true`,
@@ -132,24 +137,40 @@ export default function WebchatPage() {
   useEffect(() => {
     fetch('/api/health')
       .then((res) => res.json())
-      .then((data) => setStorageWarning(!data.persistent))
+      .then((data) => {
+        setStorageWarning(!data.persistent);
+        setRealtimeEnabled(Boolean(data.realtime));
+      })
       .catch(() => setStorageWarning(true));
   }, []);
 
+  const realtimeStatus = useRealtime(realtimeEnabled, (event) => {
+    fetchUsers();
+    if (event.userId === selectedUserId) {
+      fetchMessages(event.userId, true);
+    }
+  });
+
+  const isLive = realtimeStatus === 'connected';
+  const pollInterval = isLive ? LIVE_POLL_MS : FALLBACK_POLL_MS;
+
   useEffect(() => {
     fetchUsers();
-    const userPoll = setInterval(fetchUsers, 5000);
+    const userPoll = setInterval(fetchUsers, pollInterval);
     return () => clearInterval(userPoll);
-  }, [fetchUsers]);
+  }, [fetchUsers, pollInterval]);
 
   useEffect(() => {
     if (!selectedUserId) return;
     fetchMessages(selectedUserId);
-    pollRef.current = setInterval(() => fetchMessages(selectedUserId), 5000);
+    pollRef.current = setInterval(
+      () => fetchMessages(selectedUserId, true),
+      pollInterval,
+    );
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [selectedUserId, fetchMessages]);
+  }, [selectedUserId, fetchMessages, pollInterval]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -208,7 +229,14 @@ export default function WebchatPage() {
             </div>
             <div>
               <h1 className="text-sm font-semibold">LINE Webchat</h1>
-              <p className="text-xs text-gray-400">Admin Dashboard</p>
+              <p className="flex items-center gap-1.5 text-xs text-gray-400">
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isLive ? 'bg-line-green' : 'bg-gray-500'
+                  }`}
+                />
+                {isLive ? 'Realtime' : 'Polling'}
+              </p>
             </div>
           </div>
         </div>

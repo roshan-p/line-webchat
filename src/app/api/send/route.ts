@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pushTextMessage } from '@/lib/line';
 import { addMessage } from '@/lib/store';
+import { publishRealtimeEvent } from '@/lib/ably';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,7 @@ export async function POST(req: NextRequest) {
     const message = await addMessage(userId, 'outbound', trimmed, {
       messageType: 'text',
     });
+    await publishRealtimeEvent('outbound', userId);
 
     return NextResponse.json({ ok: true, message });
   } catch (error) {

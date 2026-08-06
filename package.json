@@ -12,6 +12,7 @@
     "@line/bot-sdk": "^9.7.0",
     "@upstash/redis": "^1.38.2",
     "@vercel/blob": "^2.7.0",
+    "ably": "^2.26.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

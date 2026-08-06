@@ -9,6 +9,7 @@ import {
 import { ingestInboundEvents } from '@/lib/redis-store';
 import { isPersistenceConfigured } from '@/lib/redis-store';
 import { addMessage, upsertUserProfile } from '@/lib/store';
+import { publishRealtimeEvent } from '@/lib/ably';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -47,20 +48,23 @@ async function handleEvents(events: WebhookEvent[]) {
 
   if (isPersistenceConfigured()) {
     await ingestInboundEvents(prepared);
-    return;
-  }
-
-  for (const item of prepared) {
-    if (item.text) {
-      await addMessage(item.userId, 'inbound', item.text, {
-        messageType: item.messageType,
-        lineMessageId: item.lineMessageId,
-        profile: item.profile,
-      });
-    } else {
-      await upsertUserProfile(item.userId, item.profile);
+  } else {
+    for (const item of prepared) {
+      if (item.text) {
+        await addMessage(item.userId, 'inbound', item.text, {
+          messageType: item.messageType,
+          lineMessageId: item.lineMessageId,
+          profile: item.profile,
+        });
+      } else {
+        await upsertUserProfile(item.userId, item.profile);
+      }
     }
   }
+
+  // Published only after the write settles so a refetch sees the new message.
+  const userIds = [...new Set(prepared.map((item) => item.userId))];
+  await Promise.all(userIds.map((userId) => publishRealtimeEvent('inbound', userId)));
 }
 
 export async function POST(req: NextRequest) {
