@@ -8,12 +8,13 @@ import {
   addMessagePersisted,
   getMessagesPersisted,
   getUsersPersisted,
-  isRedisConfigured,
+  isPersistenceConfigured,
   markUserReadPersisted,
   upsertUserProfilePersisted,
 } from './redis-store';
 
 export type { ChatMessage, ChatUser, MessageDirection };
+export { getStorageBackend, isPersistenceConfigured } from './redis-store';
 
 interface MemoryStore {
   users: Map<string, ChatUser>;
@@ -38,7 +39,7 @@ export async function addMessage(
   text: string,
   options: AddMessageOptions = {},
 ): Promise<ChatMessage> {
-  if (isRedisConfigured()) {
+  if (isPersistenceConfigured()) {
     return addMessagePersisted(userId, direction, text, options);
   }
 
@@ -81,7 +82,7 @@ export async function upsertUserProfile(
   userId: string,
   profile: { displayName: string; pictureUrl?: string },
 ) {
-  if (isRedisConfigured()) {
+  if (isPersistenceConfigured()) {
     return upsertUserProfilePersisted(userId, profile);
   }
 
@@ -102,7 +103,7 @@ export async function upsertUserProfile(
 }
 
 export async function markUserRead(userId: string) {
-  if (isRedisConfigured()) {
+  if (isPersistenceConfigured()) {
     return markUserReadPersisted(userId);
   }
   const user = getMemory().users.get(userId);
@@ -110,14 +111,14 @@ export async function markUserRead(userId: string) {
 }
 
 export async function getUsers(): Promise<ChatUser[]> {
-  if (isRedisConfigured()) return getUsersPersisted();
+  if (isPersistenceConfigured()) return getUsersPersisted();
   return Array.from(getMemory().users.values()).sort(
     (a, b) => b.lastMessageAt - a.lastMessageAt,
   );
 }
 
 export async function getMessages(userId: string): Promise<ChatMessage[]> {
-  if (isRedisConfigured()) return getMessagesPersisted(userId);
+  if (isPersistenceConfigured()) return getMessagesPersisted(userId);
   return (getMemory().messages.get(userId) ?? []).map((msg) => ({
     ...msg,
     messageType: msg.messageType ?? 'text',

@@ -1,4 +1,5 @@
 import { Redis } from '@upstash/redis';
+import { loadStoreFromBlob, saveStoreToBlob, isBlobConfigured } from './blob-store';
 import type {
   AddMessageOptions,
   ChatMessage,
@@ -13,6 +14,8 @@ export interface PersistedStore {
   messages: Record<string, ChatMessage[]>;
 }
 
+const EMPTY_STORE: PersistedStore = { users: {}, messages: {} };
+
 function getRedis(): Redis | null {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -20,19 +23,41 @@ function getRedis(): Redis | null {
   return new Redis({ url, token });
 }
 
+export function isRedisConfigured(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
+  );
+}
+
+export function isPersistenceConfigured(): boolean {
+  return isRedisConfigured() || isBlobConfigured();
+}
+
+export function getStorageBackend(): 'redis' | 'blob' | 'memory' {
+  if (isRedisConfigured()) return 'redis';
+  if (isBlobConfigured()) return 'blob';
+  return 'memory';
+}
+
 export async function loadStore(): Promise<PersistedStore> {
   const redis = getRedis();
-  if (!redis) {
-    return { users: {}, messages: {} };
+  if (redis) {
+    const data = await redis.get<PersistedStore>(STORE_KEY);
+    return data ?? EMPTY_STORE;
   }
-  const data = await redis.get<PersistedStore>(STORE_KEY);
-  return data ?? { users: {}, messages: {} };
+
+  const blobData = await loadStoreFromBlob();
+  return blobData ?? EMPTY_STORE;
 }
 
 export async function saveStore(store: PersistedStore): Promise<void> {
   const redis = getRedis();
-  if (!redis) return;
-  await redis.set(STORE_KEY, store);
+  if (redis) {
+    await redis.set(STORE_KEY, store);
+    return;
+  }
+
+  await saveStoreToBlob(store);
 }
 
 export async function addMessagePersisted(
@@ -120,10 +145,4 @@ export async function getMessagesPersisted(userId: string): Promise<ChatMessage[
     ...msg,
     messageType: msg.messageType ?? 'text',
   }));
-}
-
-export function isRedisConfigured(): boolean {
-  return Boolean(
-    process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN,
-  );
 }

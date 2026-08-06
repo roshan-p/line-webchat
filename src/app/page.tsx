@@ -95,6 +95,7 @@ export default function WebchatPage() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [storageWarning, setStorageWarning] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -125,29 +126,46 @@ export default function WebchatPage() {
   }, []);
 
   useEffect(() => {
+    let fallbackPoll: ReturnType<typeof setInterval> | null = null;
+
     fetchUsers();
-    const userPoll = setInterval(fetchUsers, 2000);
+
+    fetch('/api/health')
+      .then((res) => res.json())
+      .then((data) => setStorageWarning(!data.persistent))
+      .catch(() => setStorageWarning(true));
+
     const es = new EventSource('/api/events');
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
         setUsers(data.users ?? []);
         setUsersLoading(false);
+        if (fallbackPoll) {
+          clearInterval(fallbackPoll);
+          fallbackPoll = null;
+        }
       } catch {
         /* ignore */
       }
     };
-    es.onerror = () => es.close();
-    return () => {
-      clearInterval(userPoll);
+    es.onerror = () => {
       es.close();
+      if (!fallbackPoll) {
+        fallbackPoll = setInterval(fetchUsers, 15000);
+      }
+    };
+
+    return () => {
+      es.close();
+      if (fallbackPoll) clearInterval(fallbackPoll);
     };
   }, [fetchUsers]);
 
   useEffect(() => {
     if (!selectedUserId) return;
     fetchMessages(selectedUserId);
-    pollRef.current = setInterval(() => fetchMessages(selectedUserId), 3000);
+    pollRef.current = setInterval(() => fetchMessages(selectedUserId), 5000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
@@ -176,7 +194,6 @@ export default function WebchatPage() {
       if (!res.ok) throw new Error(data.error ?? 'Send failed');
       setMessages((prev) => [...prev, data.message]);
       setInput('');
-      fetchUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send');
     } finally {
@@ -192,7 +209,13 @@ export default function WebchatPage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden">
+      {storageWarning && (
+        <div className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-center text-xs text-amber-200">
+          แชทเก็บใน memory ชั่วคราว อาจหายเมื่อ server restart ควรตั้ง Vercel Blob หรือ Upstash Redis
+        </div>
+      )}
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Sidebar */}
       <aside className="flex w-80 shrink-0 flex-col border-r border-line-border bg-line-panel">
         <div className="border-b border-line-border px-4 py-4">
@@ -364,6 +387,7 @@ export default function WebchatPage() {
           </div>
         )}
       </main>
+    </div>
     </div>
   );
 }
