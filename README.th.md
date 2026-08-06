@@ -163,8 +163,13 @@ src/
 │   ├── i18n.ts                   ข้อความภาษาไทยทั้งหมด
 │   └── format.ts                 จัดรูปแบบเวลาและชื่อ
 │
-└── types/
-    └── chat.ts                   type ฝั่ง client (derive จาก store-types)
+├── types/
+│   └── chat.ts                   type ฝั่ง client (derive จาก store-types)
+│
+└── tests/                        โครงเดียวกับโฟลเดอร์ข้างบน ไฟล์ละหนึ่งเทสต์
+    ├── components/
+    ├── hooks/
+    └── lib/
 ```
 
 ### หลักการแบ่งชั้น
@@ -300,6 +305,39 @@ API key อยู่ฝั่ง server เท่านั้น browser จะ�
 
 ---
 
+## เทสต์
+
+```bash
+npm test         # รันรอบเดียว
+npm run test:watch
+```
+
+ใช้ Vitest กับ jsdom ทั้งหมด 138 เทสต์ วางไว้ใน `src/tests/` ซึ่งมีโครงเหมือน `src/`
+ทุกอย่าง ไฟล์เทสต์จึงอยู่ path เดียวกับไฟล์ที่มันคุม เช่น `src/tests/lib/store.test.ts`
+คู่กับ `src/lib/store.ts` และ `src/tests/app/api/send/route.test.ts` คู่กับ
+`src/app/api/send/route.ts`
+
+```
+src/tests/
+├── app/api/          ทุก API route
+├── components/       UI components
+├── hooks/            client hooks
+├── lib/              logic ฝั่ง server และ shared
+└── helpers.ts        fixture และ request builder ร่วม
+```
+
+สิ่งที่เลือกมาคุมคือจุดที่พังแบบเงียบๆ ไม่ใช่พังแบบเห็นชัด ได้แก่การนับ unread กับ
+การเรียงลำดับแชทใน store, การ parse event จาก LINE รวมถึงชนิดที่ UI แสดงไม่ได้,
+การตรวจลายเซ็น webhook, รอบ load/save ของ Blob, การ publish และออก token ของ Ably
+และตัว mock ที่การพัฒนาบนเครื่องพึ่งพาอยู่
+
+ส่วนใหญ่อยู่ที่ `useChat` กับ `MessageBubble` เพราะ optimistic send มีหลายสถานะที่
+ทดสอบด้วยมือได้ยาก เรา mock ทั้ง Ably และ api-client ไว้ จึงบังคับลำดับเหตุการณ์ที่
+สร้างปัญหาบน production ได้ตรงๆ ทั้งกรณี push มาถึงก่อน response ของการส่ง กรณี
+refetch เข้ามาระหว่างที่ข้อความยังส่งไม่เสร็จ และกรณีกด retry แล้วพังซ้ำอีกรอบ
+
+---
+
 ## ข้อจำกัดที่ควรรู้
 
 - Blob เขียนทับทั้งไฟล์ทุกครั้ง เหมาะกับสเกลเล็ก ถ้าใช้งานจริงควรย้ายไป database
@@ -318,6 +356,7 @@ API key อยู่ฝั่ง server เท่านั้น browser จะ�
 |---|---|
 | Framework | Next.js 15 (App Router) + TypeScript |
 | Styling | Tailwind CSS |
+| Tests | Vitest + Testing Library |
 | LINE | @line/bot-sdk (Messaging API) |
 | Realtime | Ably (ทางเลือก) |
 | Storage | Vercel Blob |

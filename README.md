@@ -166,8 +166,13 @@ src/
 │   ├── i18n.ts                   all Thai UI copy
 │   └── format.ts                 time and name formatting
 │
-└── types/
-    └── chat.ts                   client-facing types, derived from store-types
+├── types/
+│   └── chat.ts                   client-facing types, derived from store-types
+│
+└── tests/                        mirrors the folders above, one test per file
+    ├── components/
+    ├── hooks/
+    └── lib/
 ```
 
 ### Layering rules
@@ -307,7 +312,38 @@ Ably client itself loads from a CDN at runtime, so it adds nothing to the bundle
 
 ---
 
-## Known limitations
+## Tests
+
+```bash
+npm test         # once
+npm run test:watch
+```
+
+Vitest with jsdom, 138 tests. They live in `src/tests/`, which mirrors the
+structure of `src/` so a test sits at the same path as the file it covers:
+`src/tests/lib/store.test.ts` for `src/lib/store.ts`,
+`src/tests/app/api/send/route.test.ts` for `src/app/api/send/route.ts`, and so on.
+
+```
+src/tests/
+├── app/api/          every API route
+├── components/       UI components
+├── hooks/            client hooks
+├── lib/              server and shared logic
+└── helpers.ts        shared fixtures and request builders
+```
+
+They cover the parts where a mistake is quiet rather than loud: the message
+store's unread counting and conversation ordering, LINE event parsing including
+the types the UI cannot render, webhook signature verification, blob
+load/save cycles, Ably publish and token issuance, and the mock that local
+development depends on.
+
+The bulk sits on `useChat` and `MessageBubble`, since optimistic sending has
+several states that are awkward to reproduce by hand. Ably and the API client
+are mocked, which lets the tests force the orderings that cause trouble in
+production: a realtime push arriving before the send response, a refetch landing
+while a message is still in flight, and a retry that fails a second time.
 
 - Blob rewrites the entire file on every save, which suits small volumes. Real
   usage should move to a database with atomic writes.
@@ -325,6 +361,7 @@ Ably client itself loads from a CDN at runtime, so it adds nothing to the bundle
 |---|---|
 | Framework | Next.js 15 (App Router) + TypeScript |
 | Styling | Tailwind CSS |
+| Tests | Vitest + Testing Library |
 | LINE | @line/bot-sdk (Messaging API) |
 | Realtime | Ably (optional) |
 | Storage | Vercel Blob |
