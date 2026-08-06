@@ -6,6 +6,8 @@ import {
   getUserProfile,
   parseMessageFromEvent,
 } from '@/lib/line';
+import { ingestInboundEvents } from '@/lib/redis-store';
+import { isPersistenceConfigured } from '@/lib/redis-store';
 import { addMessage, upsertUserProfile } from '@/lib/store';
 import crypto from 'crypto';
 
@@ -23,20 +25,40 @@ function verifySignature(body: string, signature: string | null): boolean {
 }
 
 async function handleEvents(events: WebhookEvent[]) {
+  const prepared = [];
+
   for (const event of events) {
     const userId = getUserIdFromEvent(event);
     if (!userId) continue;
 
     const profile = await getUserProfile(userId);
-    await upsertUserProfile(userId, profile);
-
     const parsed = parseMessageFromEvent(event);
-    if (parsed) {
-      await addMessage(userId, 'inbound', parsed.text, {
-        messageType: parsed.messageType,
-        lineMessageId: parsed.lineMessageId,
-        profile,
+
+    prepared.push({
+      userId,
+      profile,
+      text: parsed?.text,
+      messageType: parsed?.messageType,
+      lineMessageId: parsed?.lineMessageId,
+    });
+  }
+
+  if (!prepared.length) return;
+
+  if (isPersistenceConfigured()) {
+    await ingestInboundEvents(prepared);
+    return;
+  }
+
+  for (const item of prepared) {
+    if (item.text) {
+      await addMessage(item.userId, 'inbound', item.text, {
+        messageType: item.messageType,
+        lineMessageId: item.lineMessageId,
+        profile: item.profile,
       });
+    } else {
+      await upsertUserProfile(item.userId, item.profile);
     }
   }
 }

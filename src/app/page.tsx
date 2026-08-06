@@ -130,40 +130,16 @@ export default function WebchatPage() {
   }, []);
 
   useEffect(() => {
-    let fallbackPoll: ReturnType<typeof setInterval> | null = null;
-
-    fetchUsers();
-
     fetch('/api/health')
       .then((res) => res.json())
       .then((data) => setStorageWarning(!data.persistent))
       .catch(() => setStorageWarning(true));
+  }, []);
 
-    const es = new EventSource('/api/events');
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        setUsers(data.users ?? []);
-        setUsersLoading(false);
-        if (fallbackPoll) {
-          clearInterval(fallbackPoll);
-          fallbackPoll = null;
-        }
-      } catch {
-        /* ignore */
-      }
-    };
-    es.onerror = () => {
-      es.close();
-      if (!fallbackPoll) {
-        fallbackPoll = setInterval(fetchUsers, 15000);
-      }
-    };
-
-    return () => {
-      es.close();
-      if (fallbackPoll) clearInterval(fallbackPoll);
-    };
+  useEffect(() => {
+    fetchUsers();
+    const userPoll = setInterval(fetchUsers, 5000);
+    return () => clearInterval(userPoll);
   }, [fetchUsers]);
 
   useEffect(() => {
@@ -274,7 +250,7 @@ export default function WebchatPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <p className="truncate text-xs text-gray-400">
-                      {user.lastMessage ?? '...'}
+                      {user.lastMessage ?? (user.lastMessageAt > 0 ? '...' : 'ยังไม่มีข้อความ')}
                     </p>
                     {user.unreadCount > 0 && (
                       <span className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-line-green text-xs font-bold text-white">
