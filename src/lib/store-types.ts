@@ -8,6 +8,8 @@ export interface ChatMessage {
   messageType: MessageType;
   text: string;
   lineMessageId?: string;
+  /** From LINE webhook when Chat is enabled in OA Manager. */
+  markAsReadToken?: string;
   timestamp: number;
 }
 
@@ -23,6 +25,7 @@ export interface ChatUser {
 export interface AddMessageOptions {
   messageType?: MessageType;
   lineMessageId?: string;
+  markAsReadToken?: string;
   profile?: { displayName: string; pictureUrl?: string };
 }
 

@@ -1,4 +1,5 @@
 import { isBlobConfigured, loadStoreFromBlob, saveStoreToBlob } from './blob-store';
+import { markInboundMessagesReadOnLine } from './line';
 import type {
   AddMessageOptions,
   ChatMessage,
@@ -39,6 +40,7 @@ function createMessage(
     messageType: options.messageType ?? 'text',
     text,
     lineMessageId: options.lineMessageId,
+    markAsReadToken: options.markAsReadToken,
     timestamp: Date.now(),
   };
 }
@@ -118,6 +120,9 @@ export async function markUserReadPersisted(userId: string) {
   const store = await loadStore();
   const user = store.users[userId];
   if (!user) return;
+
+  await markInboundMessagesReadOnLine(store.messages[userId] ?? []);
+
   user.unreadCount = 0;
   await saveStore(store);
 }
@@ -141,6 +146,7 @@ export interface InboundEvent {
   text?: string;
   messageType?: ChatMessage['messageType'];
   lineMessageId?: string;
+  markAsReadToken?: string;
 }
 
 /**
@@ -156,6 +162,7 @@ export async function ingestInboundEvents(events: InboundEvent[]): Promise<void>
       const message = createMessage(event.userId, 'inbound', event.text, {
         messageType: event.messageType,
         lineMessageId: event.lineMessageId,
+        markAsReadToken: event.markAsReadToken,
       });
       applyMessage(store, message, event.profile);
     } else {

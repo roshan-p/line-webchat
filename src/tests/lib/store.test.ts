@@ -17,6 +17,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('addMessage', () => {
@@ -96,11 +97,27 @@ describe('getUsers', () => {
 });
 
 describe('markUserRead', () => {
+  const snapshot = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...snapshot };
+  });
+
   it('clears the badge', async () => {
     await addMessage('U1', 'inbound', 'hello');
     await markUserRead('U1');
 
     expect((await getUsers())[0].unreadCount).toBe(0);
+  });
+
+  it('marks inbound messages as read on LINE when a token is present', async () => {
+    process.env.LINE_MOCK = '1';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await addMessage('U1', 'inbound', 'hello', { markAsReadToken: 'token-1' });
+    await markUserRead('U1');
+
+    expect(log).toHaveBeenCalledWith('[LINE_MOCK] mark as read: token-1');
   });
 
   it('ignores a user who does not exist rather than throwing', async () => {

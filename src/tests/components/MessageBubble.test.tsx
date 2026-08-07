@@ -25,6 +25,7 @@ describe('MessageBubble', () => {
 
     expect(screen.getByText('hello')).toBeInTheDocument();
     expect(screen.getByText('09:05')).toBeInTheDocument();
+    expect(screen.getByLabelText(t.chat.sent)).toBeInTheDocument();
   });
 
   it('points an image at the proxy rather than at LINE directly', () => {
@@ -74,5 +75,16 @@ describe('MessageBubble', () => {
     render(<MessageBubble message={message({ direction: 'inbound' })} onRetry={noop} />);
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(t.chat.sent)).not.toBeInTheDocument();
+  });
+
+  it('hides the sent checkmark while sending or after a failure', () => {
+    const { rerender } = render(
+      <MessageBubble message={message({ deliveryStatus: 'sending' })} onRetry={noop} />,
+    );
+    expect(screen.queryByLabelText(t.chat.sent)).not.toBeInTheDocument();
+
+    rerender(<MessageBubble message={message({ deliveryStatus: 'failed' })} onRetry={noop} />);
+    expect(screen.queryByLabelText(t.chat.sent)).not.toBeInTheDocument();
   });
 });

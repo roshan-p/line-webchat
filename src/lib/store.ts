@@ -4,6 +4,7 @@ import type {
   ChatUser,
   MessageDirection,
 } from './store-types';
+import { markInboundMessagesReadOnLine } from './line';
 import {
   addMessagePersisted,
   getMessagesPersisted,
@@ -43,7 +44,7 @@ export async function addMessage(
     return addMessagePersisted(userId, direction, text, options);
   }
 
-  const { messageType = 'text', lineMessageId, profile } = options;
+  const { messageType = 'text', lineMessageId, markAsReadToken, profile } = options;
   const mem = getMemory();
   const message: ChatMessage = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -52,6 +53,7 @@ export async function addMessage(
     messageType,
     text,
     lineMessageId,
+    markAsReadToken,
     timestamp: Date.now(),
   };
 
@@ -106,8 +108,13 @@ export async function markUserRead(userId: string) {
   if (isPersistenceConfigured()) {
     return markUserReadPersisted(userId);
   }
-  const user = getMemory().users.get(userId);
-  if (user) user.unreadCount = 0;
+
+  const mem = getMemory();
+  const user = mem.users.get(userId);
+  if (!user) return;
+
+  await markInboundMessagesReadOnLine(mem.messages.get(userId) ?? []);
+  user.unreadCount = 0;
 }
 
 export async function getUsers(): Promise<ChatUser[]> {

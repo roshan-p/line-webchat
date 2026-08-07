@@ -4,6 +4,12 @@ interface ParsedLineMessage {
   messageType: 'text' | 'image';
   text: string;
   lineMessageId?: string;
+  markAsReadToken?: string;
+}
+
+interface MarkAsReadMessage {
+  direction: string;
+  markAsReadToken?: string;
 }
 
 /**
@@ -62,13 +68,20 @@ export async function pushTextMessage(userId: string, text: string) {
   await client.pushMessage(userId, message);
 }
 
+
 export function parseMessageFromEvent(event: WebhookEvent): ParsedLineMessage | null {
   if (event.type !== 'message') return null;
+
+  const markAsReadToken =
+    'markAsReadToken' in event.message
+      ? (event.message as { markAsReadToken?: string }).markAsReadToken || undefined
+      : undefined;
 
   if (event.message.type === 'text') {
     return {
       messageType: 'text',
       text: event.message.text,
+      markAsReadToken,
     };
   }
 
@@ -77,10 +90,52 @@ export function parseMessageFromEvent(event: WebhookEvent): ParsedLineMessage | 
       messageType: 'image',
       text: '[รูปภาพ]',
       lineMessageId: event.message.id,
+      markAsReadToken,
     };
   }
 
   return null;
+}
+
+export function latestMarkAsReadToken(messages: MarkAsReadMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (message.direction === 'inbound' && message.markAsReadToken) {
+      return message.markAsReadToken;
+    }
+  }
+  return undefined;
+}
+
+export async function markChatAsRead(markAsReadToken: string): Promise<void> {
+  if (isLineMocked()) {
+    console.log(`[LINE_MOCK] mark as read: ${markAsReadToken}`);
+    return;
+  }
+
+  const response = await fetch('https://api.line.me/v2/bot/chat/markAsRead', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${requireEnv('LINE_CHANNEL_ACCESS_TOKEN')}`,
+    },
+    body: JSON.stringify({ markAsReadToken }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to mark chat as read: ${response.status}`);
+  }
+}
+
+export async function markInboundMessagesReadOnLine(messages: MarkAsReadMessage[]): Promise<void> {
+  const token = latestMarkAsReadToken(messages);
+  if (!token) return;
+
+  try {
+    await markChatAsRead(token);
+  } catch (error) {
+    console.error('markChatAsRead failed:', error);
+  }
 }
 
 export function getUserIdFromEvent(event: WebhookEvent): string | null {

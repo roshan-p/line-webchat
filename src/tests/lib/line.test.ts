@@ -4,6 +4,8 @@ import {
   getUserIdFromEvent,
   getUserProfile,
   isLineMocked,
+  latestMarkAsReadToken,
+  markChatAsRead,
   parseMessageFromEvent,
   pushTextMessage,
 } from '@/lib/line';
@@ -22,6 +24,22 @@ describe('parseMessageFromEvent', () => {
   it('reads the body of a text message', () => {
     const parsed = parseMessageFromEvent(messageEvent({ type: 'text', id: 'm1', text: 'hi' }));
     expect(parsed).toEqual({ messageType: 'text', text: 'hi' });
+  });
+
+  it('keeps markAsReadToken when Chat is enabled on the LINE account', () => {
+    const parsed = parseMessageFromEvent(
+      messageEvent({
+        type: 'text',
+        id: 'm1',
+        text: 'hi',
+        markAsReadToken: 'token-abc',
+      }),
+    );
+    expect(parsed).toEqual({
+      messageType: 'text',
+      text: 'hi',
+      markAsReadToken: 'token-abc',
+    });
   });
 
   it('keeps the LINE message id for images, since that is how the proxy fetches them', () => {
@@ -55,6 +73,38 @@ describe('getUserIdFromEvent', () => {
       message: { type: 'text', id: 'm1', text: 'hi' },
     };
     expect(getUserIdFromEvent(group as unknown as WebhookEvent)).toBeNull();
+  });
+});
+
+describe('latestMarkAsReadToken', () => {
+  it('returns the token from the latest inbound message', () => {
+    const token = latestMarkAsReadToken([
+      { direction: 'inbound', markAsReadToken: 'old' },
+      { direction: 'outbound' },
+      { direction: 'inbound', markAsReadToken: 'new' },
+    ]);
+    expect(token).toBe('new');
+  });
+
+  it('returns undefined when no inbound token exists', () => {
+    expect(latestMarkAsReadToken([{ direction: 'outbound' }])).toBeUndefined();
+  });
+});
+
+describe('markChatAsRead', () => {
+  const snapshot = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...snapshot };
+    vi.restoreAllMocks();
+  });
+
+  it('logs instead of calling LINE under the mock', async () => {
+    process.env.LINE_MOCK = '1';
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await expect(markChatAsRead('token-1')).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith('[LINE_MOCK] mark as read: token-1');
   });
 });
 

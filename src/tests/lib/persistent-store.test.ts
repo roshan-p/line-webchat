@@ -3,11 +3,16 @@ import type { PersistedStore } from '@/lib/store-types';
 
 const loadStoreFromBlob = vi.fn();
 const saveStoreToBlob = vi.fn();
+const markInboundMessagesReadOnLine = vi.fn();
 
 vi.mock('@/lib/blob-store', () => ({
   isBlobConfigured: () => true,
   loadStoreFromBlob: (...args: unknown[]) => loadStoreFromBlob(...args),
   saveStoreToBlob: (...args: unknown[]) => saveStoreToBlob(...args),
+}));
+
+vi.mock('@/lib/line', () => ({
+  markInboundMessagesReadOnLine: (...args: unknown[]) => markInboundMessagesReadOnLine(...args),
 }));
 
 import {
@@ -26,6 +31,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   loadStoreFromBlob.mockResolvedValue(emptyStore());
   saveStoreToBlob.mockResolvedValue(undefined);
+  markInboundMessagesReadOnLine.mockResolvedValue(undefined);
 });
 
 describe('configuration', () => {
@@ -93,6 +99,34 @@ describe('markUserReadPersisted', () => {
 
     const saved = saveStoreToBlob.mock.calls[0][0] as PersistedStore;
     expect(saved.users.U1.unreadCount).toBe(0);
+  });
+
+  it('notifies LINE when the latest inbound message has a markAsReadToken', async () => {
+    const inbound = {
+      id: 'm1',
+      userId: 'U1',
+      direction: 'inbound' as const,
+      messageType: 'text' as const,
+      text: 'hi',
+      markAsReadToken: 'token-1',
+      timestamp: 1,
+    };
+
+    loadStoreFromBlob.mockResolvedValue({
+      users: {
+        U1: {
+          userId: 'U1',
+          displayName: 'Alice',
+          lastMessageAt: 1,
+          unreadCount: 1,
+        },
+      },
+      messages: { U1: [inbound] },
+    });
+
+    await markUserReadPersisted('U1');
+
+    expect(markInboundMessagesReadOnLine).toHaveBeenCalledWith([inbound]);
   });
 });
 

@@ -26,6 +26,7 @@ export const t = {
     send: 'ส่งข้อความ',
     selectUser: 'เลือก User เพื่อเริ่มตอบกลับ',
     sending: 'กำลังส่ง',
+    sent: 'ส่งแล้ว',
     resend: 'ส่งใหม่',
   },
   errors: {

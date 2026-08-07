@@ -1,4 +1,4 @@
-import { RetryIcon } from './icons';
+import { RetryIcon, SentCheckIcon } from './icons';
 import { apiRoutes } from '@/lib/api-client';
 import { formatTime } from '@/lib/format';
 import { t } from '@/lib/i18n';
@@ -46,11 +46,22 @@ export function MessageBubble({ message, onRetry }: MessageBubbleProps) {
           <p className="whitespace-pre-wrap break-words px-3 py-1">{message.text}</p>
         )}
         <p
-          className={`mt-1 px-3 pb-1 text-right text-xs ${
+          className={`mt-1 flex items-center justify-end gap-0.5 px-3 pb-1 text-xs ${
             outbound ? 'text-line-ink/60' : 'text-gray-500'
           }`}
         >
-          {sending ? t.chat.sending : formatTime(message.timestamp)}
+          {sending ? (
+            t.chat.sending
+          ) : (
+            <>
+              <span>{formatTime(message.timestamp)}</span>
+              {outbound && !failed && (
+                <span title={t.chat.sent} aria-label={t.chat.sent}>
+                  <SentCheckIcon />
+                </span>
+              )}
+            </>
+          )}
         </p>
       </div>
     </div>

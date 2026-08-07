@@ -44,6 +44,7 @@ async function handleEvents(events: WebhookEvent[]) {
       text: parsed?.text,
       messageType: parsed?.messageType,
       lineMessageId: parsed?.lineMessageId,
+      markAsReadToken: parsed?.markAsReadToken,
     });
   }
 
@@ -57,6 +58,7 @@ async function handleEvents(events: WebhookEvent[]) {
         await addMessage(item.userId, 'inbound', item.text, {
           messageType: item.messageType,
           lineMessageId: item.lineMessageId,
+          markAsReadToken: item.markAsReadToken,
           profile: item.profile,
         });
       } else {
