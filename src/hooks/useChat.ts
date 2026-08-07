@@ -13,6 +13,7 @@ export interface UseChatResult {
   selectedUserId: string | null;
   messages: ChatMessage[];
   messagesLoading: boolean;
+  unreadOnOpen: number;
   isLive: boolean;
   selectUser: (userId: string | null) => void;
   send: (text: string) => void;
@@ -36,6 +37,8 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [unreadOnOpen, setUnreadOnOpen] = useState(0);
+  const selectedUserIdRef = useRef<string | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -108,10 +111,19 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
-  const selectUser = useCallback((userId: string | null) => {
-    setSelectedUserId(userId);
-    setMessages([]);
-  }, []);
+  const selectUser = useCallback(
+    (userId: string | null) => {
+      if (selectedUserIdRef.current === userId) return;
+
+      selectedUserIdRef.current = userId;
+      setSelectedUserId(userId);
+      setMessages([]);
+      setUnreadOnOpen(
+        userId ? (users.find((user) => user.userId === userId)?.unreadCount ?? 0) : 0,
+      );
+    },
+    [users],
+  );
 
   const deliver = useCallback(async (userId: string, id: string, text: string) => {
     try {
@@ -171,6 +183,7 @@ export function useChat(realtimeEnabled: boolean): UseChatResult {
     selectedUserId,
     messages,
     messagesLoading,
+    unreadOnOpen,
     isLive,
     selectUser,
     send,

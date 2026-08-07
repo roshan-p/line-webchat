@@ -9,6 +9,7 @@ interface ChatPanelProps {
   user: ChatUser | null;
   messages: ChatMessage[];
   messagesLoading: boolean;
+  unreadOnOpen: number;
   onBack: () => void;
   onSend: (text: string) => void;
   onRetry: (messageId: string) => void;
@@ -31,6 +32,7 @@ export function ChatPanel({
   user,
   messages,
   messagesLoading,
+  unreadOnOpen,
   onBack,
   onSend,
   onRetry,
@@ -43,7 +45,13 @@ export function ChatPanel({
       {user ? (
         <>
           <ChatHeader user={user} onBack={onBack} />
-          <MessageList messages={messages} loading={messagesLoading} onRetry={onRetry} />
+          <MessageList
+            key={user.userId}
+            messages={messages}
+            loading={messagesLoading}
+            unreadOnOpen={unreadOnOpen}
+            onRetry={onRetry}
+          />
           <MessageComposer onSend={onSend} />
         </>
       ) : (

@@ -84,6 +84,17 @@ describe('loading', () => {
     expect(result.current.messages).toEqual([]);
     expect(result.current.selectedUser).toBeNull();
   });
+
+  it('does not clear messages when the same user is selected again', async () => {
+    const { result } = await openChat();
+    const messagesBefore = result.current.messages;
+    const fetchCalls = vi.mocked(api.fetchMessages).mock.calls.length;
+
+    act(() => result.current.selectUser('U1'));
+
+    expect(result.current.messages).toEqual(messagesBefore);
+    expect(vi.mocked(api.fetchMessages).mock.calls.length).toBe(fetchCalls);
+  });
 });
 
 describe('sending', () => {

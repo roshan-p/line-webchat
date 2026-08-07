@@ -28,6 +28,7 @@ export default function WebchatPage() {
           user={chat.selectedUser}
           messages={chat.messages}
           messagesLoading={chat.messagesLoading}
+          unreadOnOpen={chat.unreadOnOpen}
           onBack={() => chat.selectUser(null)}
           onSend={chat.send}
           onRetry={chat.retry}

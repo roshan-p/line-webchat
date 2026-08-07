@@ -10,13 +10,13 @@ beforeEach(() => {
 
 describe('MessageList', () => {
   it('shows a loading state', () => {
-    render(<MessageList messages={[]} loading onRetry={vi.fn()} />);
+    render(<MessageList messages={[]} loading unreadOnOpen={0} onRetry={vi.fn()} />);
 
     expect(screen.getByText(t.chat.loadingMessages)).toBeInTheDocument();
   });
 
   it('shows an empty state when there are no messages', () => {
-    render(<MessageList messages={[]} loading={false} onRetry={vi.fn()} />);
+    render(<MessageList messages={[]} loading={false} unreadOnOpen={0} onRetry={vi.fn()} />);
 
     expect(screen.getByText(t.chat.emptyConversation)).toBeInTheDocument();
   });
@@ -26,6 +26,7 @@ describe('MessageList', () => {
       <MessageList
         messages={[makeMessage({ id: 'm1', text: 'one' }), makeMessage({ id: 'm2', text: 'two' })]}
         loading={false}
+        unreadOnOpen={0}
         onRetry={vi.fn()}
       />,
     );
@@ -39,17 +40,43 @@ describe('MessageList', () => {
     Element.prototype.scrollIntoView = scrollIntoView;
 
     const { rerender } = render(
-      <MessageList messages={[makeMessage()]} loading={false} onRetry={vi.fn()} />,
+      <MessageList
+        messages={[makeMessage()]}
+        loading={false}
+        unreadOnOpen={0}
+        onRetry={vi.fn()}
+      />,
     );
 
     rerender(
       <MessageList
         messages={[makeMessage(), makeMessage({ id: 'm2', text: 'new' })]}
         loading={false}
+        unreadOnOpen={0}
         onRetry={vi.fn()}
       />,
     );
 
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
+  });
+
+  it('scrolls to the first unread message when a chat is opened', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(
+      <MessageList
+        messages={[
+          makeMessage({ id: 'm1', direction: 'inbound', text: 'read' }),
+          makeMessage({ id: 'm2', direction: 'outbound', text: 'reply' }),
+          makeMessage({ id: 'm3', direction: 'inbound', text: 'unread' }),
+        ]}
+        loading={false}
+        unreadOnOpen={1}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'auto' });
   });
 });
