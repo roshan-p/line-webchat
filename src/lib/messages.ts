@@ -7,6 +7,9 @@ export function firstUnreadMessageIndex(
 ): number | null {
   if (unreadCount <= 0 || messages.length === 0) return null;
 
+  const latest = messages[messages.length - 1];
+  if (latest.direction === 'outbound') return null;
+
   let remaining = unreadCount;
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i].direction === 'inbound') {

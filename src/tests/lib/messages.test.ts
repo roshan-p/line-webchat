@@ -41,4 +41,14 @@ describe('firstUnreadMessageIndex', () => {
 
     expect(firstUnreadMessageIndex(messages, 1)).toBe(2);
   });
+
+  it('returns null when the latest message is from the sender', () => {
+    const messages = [
+      message('inbound', 'a'),
+      message('inbound', 'b'),
+      message('outbound', 'c'),
+    ];
+
+    expect(firstUnreadMessageIndex(messages, 2)).toBeNull();
+  });
 });

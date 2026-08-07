@@ -79,4 +79,24 @@ describe('MessageList', () => {
 
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'auto' });
   });
+
+  it('scrolls to the bottom when the latest message is from the sender', () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    render(
+      <MessageList
+        messages={[
+          makeMessage({ id: 'm1', direction: 'inbound', text: 'unread' }),
+          makeMessage({ id: 'm2', direction: 'outbound', text: 'my reply' }),
+        ]}
+        loading={false}
+        unreadOnOpen={1}
+        onRetry={vi.fn()}
+      />,
+    );
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto' });
+    expect(scrollIntoView).not.toHaveBeenCalledWith({ block: 'start', behavior: 'auto' });
+  });
 });
